@@ -1,0 +1,10 @@
+-- Rendered with templatefile() because the file name ends in .tftpl.
+-- @run_date is a scheduled-query parameter and is left alone.
+SELECT
+  DATE(updated_at) AS order_date,
+  COUNT(*) AS orders,
+  SUM(amount) AS revenue
+FROM `${project_id}.${datasets.shop}.orders`
+WHERE status = 'COMPLETED'
+  AND DATE(updated_at) = DATE_SUB(@run_date, INTERVAL 1 DAY)
+GROUP BY order_date

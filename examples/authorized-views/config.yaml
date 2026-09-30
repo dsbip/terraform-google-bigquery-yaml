@@ -1,0 +1,104 @@
+# yaml-language-server: $schema=../../schemas/bigquery-config.schema.json
+#
+# Share sensitive data without granting access to it.
+#
+#   hr_private     employee records with salaries and national IDs. Only the HR
+#                  team can read it directly.
+#   hr_shared      curated views over hr_private, readable by all employees.
+#                  The views are *authorized* on hr_private, so they can read it
+#                  even though their readers cannot.
+#   hr_analytics   every view in this dataset is authorized at once
+#                  (authorized dataset).
+#
+# Groups come from template_vars (see main.tf).
+
+defaults:
+  location: EU
+  tables:
+    deletion_protection: false
+  datasets:
+    delete_contents_on_destroy: true
+
+datasets:
+  hr_private:
+    description: Restricted HR data. Do not grant broad access here.
+    labels:
+      data_classification: confidential
+    access:
+      - role: WRITER
+        members:
+          - group:${hr_team_group}
+    # Views, datasets and routines allowed to read this dataset.
+    authorized_views:
+      - hr_shared.employee_directory # "<dataset key>.<view key>" from this file
+      - hr_shared.headcount_by_department
+    authorized_datasets:
+      - hr_analytics # every view in hr_analytics
+    authorized_routines:
+      - hr_shared.employees_in_department # a table-valued function
+
+    tables:
+      employees:
+        schema:
+          - { name: employee_id, type: STRING, mode: REQUIRED }
+          - { name: full_name, type: STRING }
+          - { name: email, type: STRING }
+          - { name: department, type: STRING }
+          - { name: manager_id, type: STRING }
+          - { name: salary, type: NUMERIC, description: Annual gross salary }
+          - { name: national_id, type: STRING, description: Sensitive }
+          - { name: hired_on, type: DATE }
+
+  hr_shared:
+    description: Employee-facing views over hr_private.
+    access:
+      - role: READER
+        members:
+          - group:${all_employees_group}
+
+    views:
+      employee_directory:
+        description: Names, emails and departments only.
+        query: |
+          SELECT employee_id, full_name, email, department, manager_id
+          FROM `${project_id}.hr_private.employees`
+
+      headcount_by_department:
+        description: Aggregated headcount; no individual rows.
+        query: |
+          SELECT department, COUNT(*) AS headcount
+          FROM `${project_id}.hr_private.employees`
+          GROUP BY department
+
+    routines:
+      employees_in_department:
+        description: Directory entries for one department.
+        routine_type: TABLE_VALUED_FUNCTION
+        language: SQL
+        arguments:
+          - { name: dept, data_type: STRING }
+        definition_body: |
+          SELECT employee_id, full_name, email
+          FROM `${project_id}.hr_private.employees`
+          WHERE department = dept
+        return_table_type:
+          columns:
+            - { name: employee_id, type: STRING }
+            - { name: full_name, type: STRING }
+            - { name: email, type: STRING }
+
+  hr_analytics:
+    description: Analyst views; the whole dataset is authorized on hr_private.
+    access:
+      - role: READER
+        members:
+          - group:${people_analytics_group}
+
+    views:
+      tenure_distribution:
+        query: |
+          SELECT department,
+                 DATE_DIFF(CURRENT_DATE(), hired_on, YEAR) AS tenure_years,
+                 COUNT(*) AS employees
+          FROM `${project_id}.hr_private.employees`
+          GROUP BY department, tenure_years

@@ -1,0 +1,18 @@
+[
+  { "name": "order_id", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "customer_id", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "status", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "amount", "type": "NUMERIC", "mode": "NULLABLE" },
+  { "name": "currency", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "created_at", "type": "TIMESTAMP", "mode": "NULLABLE" },
+  {
+    "name": "items",
+    "type": "RECORD",
+    "mode": "REPEATED",
+    "fields": [
+      { "name": "sku", "type": "STRING", "mode": "NULLABLE" },
+      { "name": "quantity", "type": "INT64", "mode": "NULLABLE" },
+      { "name": "unit_price", "type": "NUMERIC", "mode": "NULLABLE" }
+    ]
+  }
+]

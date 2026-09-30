@@ -1,0 +1,40 @@
+[
+  {
+    "name": "event_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Unique event ID."
+  },
+  {
+    "name": "event_time",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "When the page was viewed."
+  },
+  {
+    "name": "user_id",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "page",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "device",
+    "type": "RECORD",
+    "mode": "NULLABLE",
+    "fields": [
+      { "name": "category", "type": "STRING", "mode": "NULLABLE" },
+      { "name": "os", "type": "STRING", "mode": "NULLABLE" },
+      { "name": "browser", "type": "STRING", "mode": "NULLABLE" }
+    ]
+  },
+  {
+    "name": "experiments",
+    "type": "STRING",
+    "mode": "REPEATED",
+    "description": "A/B test variants the user was in."
+  }
+]

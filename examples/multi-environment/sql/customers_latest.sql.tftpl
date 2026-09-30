@@ -1,0 +1,8 @@
+SELECT * EXCEPT (row_num)
+FROM (
+  SELECT
+    *,
+    ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY ingested_at DESC) AS row_num
+  FROM `${project_id}.${datasets.raw}.customers`
+)
+WHERE row_num = 1

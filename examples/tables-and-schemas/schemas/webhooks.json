@@ -1,0 +1,6 @@
+[
+  { "name": "id", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "source", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "received_at", "type": "TIMESTAMP", "mode": "NULLABLE" },
+  { "name": "body", "type": "JSON", "mode": "NULLABLE" }
+]

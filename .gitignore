@@ -1,0 +1,32 @@
+# Terraform working files
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+plan.bin
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Variable files often hold secrets; examples take values on the command line.
+*.tfvars
+*.tfvars.json
+
+# Python
+__pycache__/
+.pytest_cache/
+*.pyc
+.venv/
+
+# Editors and OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db

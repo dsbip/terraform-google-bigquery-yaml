@@ -1,0 +1,137 @@
+# yaml-language-server: $schema=../../schemas/bigquery-config.schema.json
+#
+# BigQuery Data Transfer Service: scheduled queries and file loads.
+#
+# Prerequisites: the BigQuery Data Transfer API is enabled, and the identity
+# running the transfers can read the sources and write the destination
+# datasets (see README.md).
+
+defaults:
+  location: US
+  tables:
+    deletion_protection: false
+  datasets:
+    delete_contents_on_destroy: true
+  transfers:
+    # Applied to every transfer unless it sets its own value.
+    email_preferences:
+      enable_failure_email: true
+
+datasets:
+  shop:
+    description: Operational data replicated from the shop database.
+    tables:
+      orders:
+        schema:
+          - { name: order_id, type: STRING, mode: REQUIRED }
+          - { name: customer_id, type: STRING }
+          - { name: amount, type: NUMERIC }
+          - { name: status, type: STRING }
+          - { name: updated_at, type: TIMESTAMP }
+        time_partitioning: { field: updated_at }
+
+      # Destination of the Cloud Storage and S3 loads below. Transfers load
+      # into existing tables, so the tables are declared here.
+      partner_orders:
+        schema:
+          - { name: order_id, type: STRING }
+          - { name: partner, type: STRING }
+          - { name: amount, type: NUMERIC }
+          - { name: exported_at, type: TIMESTAMP }
+      marketplace_orders:
+        schema:
+          - { name: order_id, type: STRING }
+          - { name: amount, type: NUMERIC }
+
+  reporting:
+    description: Tables written by scheduled queries.
+    tables:
+      customer_ltv:
+        schema:
+          - { name: customer_id, type: STRING, mode: REQUIRED }
+          - { name: lifetime_value, type: NUMERIC }
+          - { name: last_order_at, type: TIMESTAMP }
+
+transfers:
+  # A daily snapshot table per run date: daily_revenue_20260101, ...
+  # destination_dataset_id is a dataset key; the location (US) is taken from it.
+  daily_revenue:
+    display_name: Daily revenue rollup
+    data_source_id: scheduled_query
+    destination_dataset_id: reporting
+    schedule: every day 02:00
+    query_file: sql/daily_revenue.sql.tftpl
+    params:
+      # {run_date} is expanded by the transfer service at run time. Quoting is
+      # only required when a value starts with "{" or sits in a { } mapping.
+      destination_table_name_template: "daily_revenue_{run_date}"
+      write_disposition: WRITE_TRUNCATE
+
+  # A DML statement: no destination dataset.
+  refresh_customer_ltv:
+    display_name: Refresh customer lifetime value
+    data_source_id: scheduled_query
+    location: US
+    schedule: every 6 hours
+    query: |
+      MERGE `${project_id}.reporting.customer_ltv` AS t
+      USING (
+        SELECT customer_id, SUM(amount) AS lifetime_value, MAX(updated_at) AS last_order_at
+        FROM `${project_id}.shop.orders`
+        WHERE status = 'COMPLETED'
+        GROUP BY customer_id
+      ) AS s
+      ON t.customer_id = s.customer_id
+      WHEN MATCHED THEN UPDATE SET lifetime_value = s.lifetime_value, last_order_at = s.last_order_at
+      WHEN NOT MATCHED THEN INSERT (customer_id, lifetime_value, last_order_at)
+        VALUES (s.customer_id, s.lifetime_value, s.last_order_at)
+
+  # Created paused, and only runs inside a window once enabled.
+  black_friday_hourly:
+    display_name: Black Friday hourly revenue
+    data_source_id: scheduled_query
+    destination_dataset_id: reporting
+    disabled: true
+    schedule: every 1 hours
+    schedule_options:
+      start_time: "2026-11-27T00:00:00Z"
+      end_time: "2026-12-01T00:00:00Z"
+    query: |
+      SELECT CURRENT_TIMESTAMP() AS snapshot_at, SUM(amount) AS revenue
+      FROM `${project_id}.shop.orders`
+      WHERE DATE(updated_at) = CURRENT_DATE()
+    params:
+      destination_table_name_template: bf_hourly
+      write_disposition: WRITE_APPEND
+
+  # Load CSV files from Cloud Storage into shop.partner_orders.
+  partner_orders_gcs:
+    display_name: Partner orders from Cloud Storage
+    data_source_id: google_cloud_storage
+    destination_dataset_id: shop
+    schedule: every 24 hours
+    params:
+      data_path_template: gs://${partner_bucket}/orders/*.csv
+      destination_table_name_template: partner_orders
+      file_format: CSV
+      write_disposition: APPEND
+      skip_leading_rows: 1
+      max_bad_records: 0
+      delete_source_files: false
+
+  # Load from Amazon S3. The secret access key comes from the module's secrets
+  # variable and never appears in this file.
+  marketplace_orders_s3:
+    display_name: Marketplace orders from S3
+    data_source_id: amazon_s3
+    destination_dataset_id: shop
+    schedule: every 24 hours
+    params:
+      data_path: s3://marketplace-exports/orders/*.csv
+      destination_table_name_template: marketplace_orders
+      access_key_id: ${aws_access_key_id}
+      file_format: CSV
+      write_disposition: WRITE_APPEND
+      skip_leading_rows: 1
+    sensitive_params:
+      secret_access_key_secret: aws_secret_access_key

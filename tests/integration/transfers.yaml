@@ -1,0 +1,23 @@
+# Live test: a scheduled query (needs the BigQuery Data Transfer API). It is
+# created disabled, so it never runs and costs nothing.
+
+datasets:
+  raw:
+    create: false
+    dataset_id: bqyaml_${suffix}_raw
+    location: ${location}
+
+transfers:
+  nightly_totals:
+    display_name: bqyaml ${suffix} nightly totals
+    data_source_id: scheduled_query
+    destination_dataset_id: raw
+    disabled: true
+    schedule: every day 03:00
+    query: |
+      SELECT customer_id, SUM(amount) AS total
+      FROM `${project_id}.bqyaml_${suffix}_raw.orders`
+      GROUP BY customer_id
+    params:
+      destination_table_name_template: totals
+      write_disposition: WRITE_TRUNCATE

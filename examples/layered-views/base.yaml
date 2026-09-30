@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=../../schemas/bigquery-config.schema.json
+#
+# Layer 1: tables and the views directly on top of them.
+
+defaults:
+  location: US
+  tables:
+    deletion_protection: false
+
+datasets:
+  staging:
+    description: Cleaned source data.
+    delete_contents_on_destroy: true
+    tables:
+      orders_raw:
+        schema:
+          - { name: order_id, type: STRING }
+          - { name: customer_id, type: STRING }
+          - { name: amount, type: NUMERIC }
+          - { name: status, type: STRING }
+          - { name: loaded_at, type: TIMESTAMP }
+    views:
+      orders:
+        description: Deduplicated orders.
+        query: |
+          SELECT * EXCEPT (rn)
+          FROM (
+            SELECT *, ROW_NUMBER() OVER (PARTITION BY order_id ORDER BY loaded_at DESC) AS rn
+            FROM `${project_id}.staging.orders_raw`
+          )
+          WHERE rn = 1

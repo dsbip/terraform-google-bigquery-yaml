@@ -1,0 +1,56 @@
+# yaml-language-server: $schema=../../schemas/bigquery-config.schema.json
+#
+# Basic example: one dataset with two tables and a view.
+#
+# The project comes from the module's project_id variable (see main.tf). The
+# module renders this file with templatefile() before parsing it, so the
+# project_id placeholder in the view SQL below becomes that project.
+
+defaults:
+  location: US
+  labels:
+    team: analytics
+  tables:
+    # Examples are meant to be destroyed again; keep the provider default
+    # (true) for production data.
+    deletion_protection: false
+
+datasets:
+  sales:
+    friendly_name: Sales
+    description: Orders and customers from the web shop.
+    delete_contents_on_destroy: true
+    access:
+      - role: READER
+        members:
+          - specialGroup:projectReaders
+
+    tables:
+      customers:
+        description: One row per customer.
+        schema:
+          - { name: customer_id, type: STRING, mode: REQUIRED, description: Primary key }
+          - { name: email, type: STRING }
+          - { name: country, type: STRING }
+          - { name: created_at, type: TIMESTAMP, mode: REQUIRED }
+
+      orders:
+        description: One row per order, partitioned by order date.
+        schema:
+          - { name: order_id, type: STRING, mode: REQUIRED }
+          - { name: customer_id, type: STRING, mode: REQUIRED }
+          - { name: amount, type: NUMERIC }
+          - { name: ordered_at, type: TIMESTAMP, mode: REQUIRED }
+        time_partitioning:
+          type: DAY
+          field: ordered_at
+        clustering: [customer_id]
+
+    views:
+      revenue_by_country:
+        description: Revenue per customer country.
+        query: |
+          SELECT c.country, SUM(o.amount) AS revenue
+          FROM `${project_id}.sales.orders` AS o
+          JOIN `${project_id}.sales.customers` AS c USING (customer_id)
+          GROUP BY c.country

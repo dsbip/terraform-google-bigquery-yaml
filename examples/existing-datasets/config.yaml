@@ -1,0 +1,62 @@
+# yaml-language-server: $schema=../../schemas/bigquery-config.schema.json
+#
+# Add tables, views, grants and authorizations to datasets that already exist
+# and are managed elsewhere (another team's Terraform, the console, ...).
+#
+# `create: false` means: do not create or manage the dataset itself, but manage
+# everything nested under it. Grants are non-authoritative, so access entries
+# added by the dataset owner are left alone.
+
+defaults:
+  location: US
+  tables:
+    deletion_protection: false
+
+datasets:
+  # Owned by the data platform team.
+  warehouse:
+    create: false
+    dataset_id: legacy_warehouse
+    access:
+      - role: READER
+        members:
+          - group:${marketing_group}
+    # The marketing views below may read the whole warehouse.
+    authorized_datasets:
+      - marketing
+    tables:
+      # A new table inside the existing dataset.
+      campaign_spend:
+        description: Daily spend per campaign, loaded by the marketing team.
+        schema:
+          - { name: campaign_id, type: STRING, mode: REQUIRED }
+          - { name: spend_date, type: DATE, mode: REQUIRED }
+          - { name: spend, type: NUMERIC }
+        time_partitioning:
+          field: spend_date
+
+  # A reference dataset in another project. Only an authorization is added:
+  # the campaign view may read it. Requires permission to update that dataset.
+  reference:
+    create: false
+    project_id: ${reference_project}
+    dataset_id: reference_data
+    authorized_views:
+      - marketing.campaign_performance
+
+  # A regular dataset created by this configuration.
+  marketing:
+    description: Marketing reporting views.
+    delete_contents_on_destroy: true
+    access:
+      - role: READER
+        members:
+          - group:${marketing_group}
+    views:
+      campaign_performance:
+        query: |
+          SELECT s.campaign_id, c.country_name, SUM(s.spend) AS spend
+          FROM `${project_id}.legacy_warehouse.campaign_spend` AS s
+          JOIN `${reference_project}.reference_data.countries` AS c
+            ON c.country_code = SUBSTR(s.campaign_id, 1, 2)
+          GROUP BY s.campaign_id, c.country_name

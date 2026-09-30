@@ -1,0 +1,33 @@
+# Live test: IAM on resources created by core.yaml, for the test_member variable.
+
+defaults:
+  tables:
+    deletion_protection: false
+
+datasets:
+  shared:
+    create: false
+    dataset_id: bqyaml_${suffix}_shared
+    access:
+      - role: READER
+        members:
+          - ${test_member}
+  raw:
+    create: false
+    dataset_id: bqyaml_${suffix}_raw
+    tables:
+      audit:
+        schema:
+          - { name: at, type: TIMESTAMP }
+        iam:
+          - role: roles/bigquery.dataViewer
+            members:
+              - ${test_member}
+    routines:
+      audit_count:
+        definition_body: "1"
+        return_type: INT64
+        iam:
+          - role: roles/bigquery.dataViewer
+            members:
+              - ${test_member}

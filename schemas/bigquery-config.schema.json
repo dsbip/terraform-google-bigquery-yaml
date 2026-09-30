@@ -1,0 +1,2624 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/dsbip/terraform-google-bigquery-yaml/main/schemas/bigquery-config.schema.json",
+  "title": "terraform-google-bigquery-yaml configuration",
+  "description": "YAML configuration consumed by the terraform-google-bigquery-yaml module. Map keys under datasets, tables, views, materialized_views, routines, connections and transfers are logical keys; each one is also the default resource ID. The module reads the 'properties' of every definition below to reject unknown keys, so this file is the single source of truth for the configuration shape.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Default project for every resource in this file. Takes precedence over the module's project_id variable; a resource-level project_id takes precedence over this."
+    },
+    "defaults": {
+      "$ref": "#/definitions/defaults"
+    },
+    "datasets": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Datasets keyed by logical key (the default dataset_id). Tables, views, materialized views and routines are nested inside their dataset.",
+      "additionalProperties": {
+        "$ref": "#/definitions/dataset"
+      }
+    },
+    "connections": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "BigQuery connections keyed by logical key (the default connection_id). Other entries can reference a connection by this key.",
+      "additionalProperties": {
+        "$ref": "#/definitions/connection"
+      }
+    },
+    "transfers": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "BigQuery Data Transfer Service configs (scheduled queries, Cloud Storage, S3, ...) keyed by logical key (the default display_name).",
+      "additionalProperties": {
+        "$ref": "#/definitions/transfer"
+      }
+    }
+  },
+  "definitions": {
+    "defaults": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Values applied to every resource of a type unless the resource sets its own. Merging is shallow (a resource value replaces the default) except labels, which are merged, and datasets.access, which is prepended to every dataset's access list.",
+      "additionalProperties": false,
+      "properties": {
+        "location": {
+          "type": "string",
+          "description": "Default location for datasets, connections and transfers (e.g. US, EU, europe-west2)."
+        },
+        "labels": {
+          "$ref": "#/definitions/labels"
+        },
+        "datasets": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/dataset"
+            },
+            {
+              "propertyNames": {
+                "not": {
+                  "enum": [
+                    "dataset_id",
+                    "project_id",
+                    "create",
+                    "tables",
+                    "views",
+                    "materialized_views",
+                    "routines",
+                    "authorized_views",
+                    "authorized_datasets",
+                    "authorized_routines"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "tables": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/table"
+            },
+            {
+              "propertyNames": {
+                "not": {
+                  "enum": [
+                    "table_id",
+                    "schema",
+                    "schema_file"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "views": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/view"
+            },
+            {
+              "propertyNames": {
+                "not": {
+                  "enum": [
+                    "table_id",
+                    "query",
+                    "query_file"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "materialized_views": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/materialized_view"
+            },
+            {
+              "propertyNames": {
+                "not": {
+                  "enum": [
+                    "table_id",
+                    "query",
+                    "query_file"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "routines": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/routine"
+            },
+            {
+              "propertyNames": {
+                "not": {
+                  "enum": [
+                    "routine_id",
+                    "definition_body",
+                    "definition_file"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "connections": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/connection"
+            },
+            {
+              "propertyNames": {
+                "not": {
+                  "enum": [
+                    "connection_id",
+                    "cloud_resource",
+                    "cloud_sql",
+                    "aws",
+                    "azure",
+                    "cloud_spanner",
+                    "spark",
+                    "configuration"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "transfers": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/transfer"
+            },
+            {
+              "propertyNames": {
+                "not": {
+                  "enum": [
+                    "display_name",
+                    "query",
+                    "query_file"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "labels": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Key/value labels. Numbers and booleans are converted to strings.",
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          },
+          {
+            "$ref": "#/definitions/template_placeholder"
+          }
+        ]
+      }
+    },
+    "resource_tags": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Resource Manager tags, e.g. {\"123456789012/environment\": \"production\"}.",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "deletion_policy": {
+      "description": "Provider-level deletion policy. PREVENT makes terraform destroy fail; ABANDON removes the resource from state without deleting it.",
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "DELETE",
+            "PREVENT",
+            "ABANDON"
+          ]
+        },
+        {
+          "$ref": "#/definitions/template_placeholder"
+        }
+      ]
+    },
+    "sql_type": {
+      "description": "A StandardSqlDataType. Either a simple type name (INT64, STRING, ...), a JSON string, or a mapping such as {typeKind: ARRAY, arrayElementType: {typeKind: STRING}}.",
+      "type": [
+        "string",
+        "object"
+      ]
+    },
+    "iam_binding": {
+      "type": "object",
+      "description": "Grants one IAM role to one or more members (non-authoritative, one google_*_iam_member per member).",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "members"
+      ],
+      "properties": {
+        "role": {
+          "type": "string",
+          "description": "IAM role, e.g. roles/bigquery.dataViewer."
+        },
+        "members": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          },
+          "description": "IAM members: user:, group:, serviceAccount:, domain:, principal://, principalSet://, allUsers, allAuthenticatedUsers."
+        },
+        "condition": {
+          "$ref": "#/definitions/iam_condition"
+        }
+      }
+    },
+    "iam_condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "expression"
+      ],
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "expression": {
+          "type": "string",
+          "description": "CEL expression."
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "access_entry": {
+      "type": "object",
+      "description": "Dataset access grant, implemented with google_bigquery_dataset_access (non-authoritative and compatible with authorized views).",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "members"
+      ],
+      "properties": {
+        "role": {
+          "type": "string",
+          "description": "OWNER, WRITER, READER, or an IAM role. roles/bigquery.dataOwner, dataEditor and dataViewer are normalised to OWNER, WRITER and READER."
+        },
+        "members": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          },
+          "description": "user:EMAIL, serviceAccount:EMAIL, group:EMAIL, domain:DOMAIN, specialGroup:NAME, projectOwners, projectWriters, projectReaders, allAuthenticatedUsers, allUsers, iamMember:MEMBER, or a principal:// / principalSet:// identifier."
+        },
+        "condition": {
+          "$ref": "#/definitions/access_condition"
+        }
+      }
+    },
+    "access_condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expression"
+      ],
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "expression": {
+          "type": "string",
+          "description": "CEL expression."
+        },
+        "description": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        }
+      }
+    },
+    "table_ref": {
+      "description": "A table or view: \"dataset.table\" (a managed view key or a dataset in the default project), \"project.dataset.table\", or a mapping.",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/definitions/table_ref_object"
+        }
+      ]
+    },
+    "table_ref_object": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataset_id",
+        "table_id"
+      ],
+      "properties": {
+        "project_id": {
+          "type": "string"
+        },
+        "dataset_id": {
+          "type": "string"
+        },
+        "table_id": {
+          "type": "string"
+        }
+      }
+    },
+    "dataset_ref": {
+      "description": "A dataset: \"dataset\" (a managed dataset key or a dataset in the default project), \"project.dataset\", or a mapping.",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/definitions/dataset_ref_object"
+        }
+      ]
+    },
+    "dataset_ref_object": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataset_id"
+      ],
+      "properties": {
+        "project_id": {
+          "type": "string"
+        },
+        "dataset_id": {
+          "type": "string"
+        },
+        "target_types": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "VIEWS"
+                ]
+              },
+              {
+                "$ref": "#/definitions/template_placeholder"
+              }
+            ]
+          },
+          "description": "Resource types in the authorized dataset that get access. Defaults to [VIEWS]."
+        }
+      }
+    },
+    "routine_ref": {
+      "description": "A routine: \"dataset.routine\" (a managed routine key or a dataset in the default project), \"project.dataset.routine\", or a mapping.",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/definitions/routine_ref_object"
+        }
+      ]
+    },
+    "routine_ref_object": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataset_id",
+        "routine_id"
+      ],
+      "properties": {
+        "project_id": {
+          "type": "string"
+        },
+        "dataset_id": {
+          "type": "string"
+        },
+        "routine_id": {
+          "type": "string"
+        }
+      }
+    },
+    "dataset": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "dataset_id": {
+          "type": "string",
+          "description": "Dataset ID. Defaults to the map key."
+        },
+        "project_id": {
+          "type": "string",
+          "description": "Project of the dataset and everything nested in it."
+        },
+        "create": {
+          "description": "Set to false for a dataset that already exists outside this configuration. Nested tables, views, routines, access grants and authorizations are still managed.",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "location": {
+          "type": "string",
+          "description": "Dataset location. Defaults to defaults.location (provider default: US)."
+        },
+        "friendly_name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "labels": {
+          "$ref": "#/definitions/labels"
+        },
+        "default_table_expiration_ms": {
+          "description": "Minimum 3600000 (one hour).",
+          "anyOf": [
+            {
+              "type": [
+                "integer",
+                "string"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "default_partition_expiration_ms": {
+          "anyOf": [
+            {
+              "type": [
+                "integer",
+                "string"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "delete_contents_on_destroy": {
+          "description": "Delete all tables when the dataset is destroyed. Defaults to false.",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "deletion_policy": {
+          "$ref": "#/definitions/deletion_policy"
+        },
+        "is_case_insensitive": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "default_collation": {
+          "type": "string",
+          "description": "'und:ci' for case-insensitive collation, or \"\" to clear it."
+        },
+        "max_time_travel_hours": {
+          "description": "48 to 168.",
+          "anyOf": [
+            {
+              "type": [
+                "integer",
+                "string"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "storage_billing_model": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "LOGICAL",
+                "PHYSICAL"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "resource_tags": {
+          "$ref": "#/definitions/resource_tags"
+        },
+        "default_encryption_configuration": {
+          "$ref": "#/definitions/encryption_configuration"
+        },
+        "external_dataset_reference": {
+          "$ref": "#/definitions/external_dataset_reference"
+        },
+        "external_catalog_dataset_options": {
+          "$ref": "#/definitions/external_catalog_dataset_options"
+        },
+        "access": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "description": "Additional dataset access grants (non-authoritative).",
+          "items": {
+            "$ref": "#/definitions/access_entry"
+          }
+        },
+        "authorized_views": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "description": "Views (logical or materialized) allowed to query this dataset.",
+          "items": {
+            "$ref": "#/definitions/table_ref"
+          }
+        },
+        "authorized_datasets": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "description": "Datasets whose views are all allowed to query this dataset.",
+          "items": {
+            "$ref": "#/definitions/dataset_ref"
+          }
+        },
+        "authorized_routines": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "description": "Routines (e.g. table-valued functions) allowed to query this dataset.",
+          "items": {
+            "$ref": "#/definitions/routine_ref"
+          }
+        },
+        "tables": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "Tables keyed by logical key (the default table_id).",
+          "additionalProperties": {
+            "$ref": "#/definitions/table"
+          }
+        },
+        "views": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "Logical views keyed by logical key (the default table_id).",
+          "additionalProperties": {
+            "$ref": "#/definitions/view"
+          }
+        },
+        "materialized_views": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "Materialized views keyed by logical key (the default table_id).",
+          "additionalProperties": {
+            "$ref": "#/definitions/materialized_view"
+          }
+        },
+        "routines": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "UDFs, table-valued functions and stored procedures keyed by logical key (the default routine_id).",
+          "additionalProperties": {
+            "$ref": "#/definitions/routine"
+          }
+        }
+      }
+    },
+    "encryption_configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kms_key_name"
+      ],
+      "properties": {
+        "kms_key_name": {
+          "type": "string",
+          "description": "projects/P/locations/L/keyRings/R/cryptoKeys/K"
+        }
+      }
+    },
+    "external_dataset_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "external_source",
+        "connection"
+      ],
+      "properties": {
+        "external_source": {
+          "type": "string",
+          "description": "e.g. aws-glue://arn:aws:glue:us-east-1:123456789:database/db"
+        },
+        "connection": {
+          "type": "string",
+          "description": "A connection key from this file, or a full connection name."
+        }
+      }
+    },
+    "external_catalog_dataset_options": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default_storage_location_uri": {
+          "type": "string"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "table": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "table_id": {
+          "type": "string",
+          "description": "Table ID. Defaults to the map key."
+        },
+        "friendly_name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "labels": {
+          "$ref": "#/definitions/labels"
+        },
+        "schema": {
+          "description": "Inline schema: a list of fields, or a JSON string. Mutually exclusive with schema_file.",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/schema"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "schema_file": {
+          "type": "string",
+          "description": "Path to a JSON or YAML schema file (a list of fields), relative to the configuration file."
+        },
+        "time_partitioning": {
+          "$ref": "#/definitions/time_partitioning"
+        },
+        "range_partitioning": {
+          "$ref": "#/definitions/range_partitioning"
+        },
+        "require_partition_filter": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "clustering": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "string"
+          },
+          "description": "Up to four top-level columns, in priority order."
+        },
+        "expiration_time": {
+          "description": "Milliseconds since the epoch.",
+          "anyOf": [
+            {
+              "type": [
+                "integer",
+                "string"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "deletion_protection": {
+          "description": "When true (the provider default), Terraform refuses to delete the table.",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "deletion_policy": {
+          "$ref": "#/definitions/deletion_policy"
+        },
+        "encryption_configuration": {
+          "$ref": "#/definitions/encryption_configuration"
+        },
+        "table_constraints": {
+          "$ref": "#/definitions/table_constraints"
+        },
+        "external_data_configuration": {
+          "$ref": "#/definitions/external_data_configuration"
+        },
+        "biglake_configuration": {
+          "$ref": "#/definitions/biglake_configuration"
+        },
+        "max_staleness": {
+          "type": "string",
+          "description": "An INTERVAL literal, e.g. '0-0 0 4:0:0'."
+        },
+        "resource_tags": {
+          "$ref": "#/definitions/resource_tags"
+        },
+        "ignore_auto_generated_schema": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "ignore_schema_changes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "iam": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/iam_binding"
+          }
+        }
+      }
+    },
+    "schema": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/schema_field"
+      }
+    },
+    "schema_field": {
+      "type": "object",
+      "required": [
+        "name",
+        "type"
+      ],
+      "description": "A BigQuery TableFieldSchema. Keys use the BigQuery API (camelCase) names.",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "STRING",
+                "BYTES",
+                "INTEGER",
+                "INT64",
+                "FLOAT",
+                "FLOAT64",
+                "NUMERIC",
+                "BIGNUMERIC",
+                "BOOLEAN",
+                "BOOL",
+                "TIMESTAMP",
+                "DATE",
+                "TIME",
+                "DATETIME",
+                "GEOGRAPHY",
+                "RECORD",
+                "STRUCT",
+                "JSON",
+                "RANGE",
+                "INTERVAL"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "NULLABLE",
+                "REQUIRED",
+                "REPEATED"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "fields": {
+          "$ref": "#/definitions/schema"
+        },
+        "policyTags": {
+          "type": "object",
+          "properties": {
+            "names": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "maxLength": {
+          "anyOf": [
+            {
+              "type": [
+                "integer",
+                "string"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "precision": {
+          "anyOf": [
+            {
+              "type": [
+                "integer",
+                "string"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "scale": {
+          "anyOf": [
+            {
+              "type": [
+                "integer",
+                "string"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "roundingMode": {
+          "type": "string"
+        },
+        "collation": {
+          "type": "string"
+        },
+        "defaultValueExpression": {
+          "type": "string"
+        },
+        "rangeElementType": {
+          "type": "object"
+        },
+        "dataPolicies": {
+          "type": "array"
+        }
+      }
+    },
+    "time_partitioning": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "description": "Defaults to DAY.",
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "DAY",
+                "HOUR",
+                "MONTH",
+                "YEAR"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "field": {
+          "type": "string",
+          "description": "Partitioning column. Omit for ingestion-time partitioning."
+        },
+        "expiration_ms": {
+          "anyOf": [
+            {
+              "type": [
+                "integer",
+                "string"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        }
+      }
+    },
+    "range_partitioning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "field",
+        "range"
+      ],
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "range": {
+          "$ref": "#/definitions/range"
+        }
+      }
+    },
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end",
+        "interval"
+      ],
+      "properties": {
+        "start": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "end": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "interval": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        }
+      }
+    },
+    "table_constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "primary_key": {
+          "$ref": "#/definitions/primary_key"
+        },
+        "foreign_keys": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/foreign_key"
+          }
+        }
+      }
+    },
+    "primary_key": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "columns"
+      ],
+      "properties": {
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "foreign_key": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "referenced_table",
+        "column_references"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "referenced_table": {
+          "$ref": "#/definitions/table_ref"
+        },
+        "column_references": {
+          "$ref": "#/definitions/column_references"
+        }
+      }
+    },
+    "column_references": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "referencing_column",
+        "referenced_column"
+      ],
+      "properties": {
+        "referencing_column": {
+          "type": "string"
+        },
+        "referenced_column": {
+          "type": "string"
+        }
+      }
+    },
+    "external_data_configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_uris"
+      ],
+      "description": "Makes the table an external table. Put the schema at table level (schema / schema_file); the module sends it where the provider expects it.",
+      "properties": {
+        "source_uris": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "source_format": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "CSV",
+                "GOOGLE_SHEETS",
+                "NEWLINE_DELIMITED_JSON",
+                "AVRO",
+                "DATASTORE_BACKUP",
+                "BIGTABLE",
+                "ORC",
+                "PARQUET",
+                "ICEBERG",
+                "DELTA_LAKE"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "autodetect": {
+          "description": "Defaults to true when no schema is given, false otherwise.",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "compression": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "NONE",
+                "GZIP"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "connection_id": {
+          "type": "string",
+          "description": "A connection key from this file, or project.location.connection_id."
+        },
+        "ignore_unknown_values": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "max_bad_records": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "json_extension": {
+          "type": "string"
+        },
+        "metadata_cache_mode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "AUTOMATIC",
+                "MANUAL"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "object_metadata": {
+          "type": "string",
+          "description": "SIMPLE for object tables."
+        },
+        "reference_file_schema_uri": {
+          "type": "string"
+        },
+        "file_set_spec_type": {
+          "type": "string"
+        },
+        "decimal_target_types": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "csv_options": {
+          "$ref": "#/definitions/csv_options"
+        },
+        "json_options": {
+          "$ref": "#/definitions/json_options"
+        },
+        "parquet_options": {
+          "$ref": "#/definitions/parquet_options"
+        },
+        "avro_options": {
+          "$ref": "#/definitions/avro_options"
+        },
+        "google_sheets_options": {
+          "$ref": "#/definitions/google_sheets_options"
+        },
+        "hive_partitioning_options": {
+          "$ref": "#/definitions/hive_partitioning_options"
+        },
+        "bigtable_options": {
+          "$ref": "#/definitions/bigtable_options"
+        }
+      }
+    },
+    "csv_options": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "quote": {
+          "type": "string",
+          "description": "Defaults to a double quote."
+        },
+        "allow_jagged_rows": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "allow_quoted_newlines": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "encoding": {
+          "type": "string"
+        },
+        "field_delimiter": {
+          "type": "string"
+        },
+        "skip_leading_rows": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "source_column_match": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "POSITION",
+                "NAME"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        }
+      }
+    },
+    "json_options": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "encoding": {
+          "type": "string"
+        }
+      }
+    },
+    "parquet_options": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enum_as_string": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "enable_list_inference": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        }
+      }
+    },
+    "avro_options": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "use_avro_logical_types": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        }
+      }
+    },
+    "google_sheets_options": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "range": {
+          "type": "string"
+        },
+        "skip_leading_rows": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        }
+      }
+    },
+    "hive_partitioning_options": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "AUTO",
+                "STRINGS",
+                "CUSTOM"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "require_partition_filter": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "source_uri_prefix": {
+          "type": "string"
+        }
+      }
+    },
+    "bigtable_options": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ignore_unspecified_column_families": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "read_rowkey_as_string": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "output_column_families_as_json": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "column_family": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/bigtable_column_family"
+          }
+        }
+      }
+    },
+    "bigtable_column_family": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "family_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "encoding": {
+          "type": "string"
+        },
+        "only_read_latest": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "column": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/bigtable_column"
+          }
+        }
+      }
+    },
+    "bigtable_column": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "qualifier_encoded": {
+          "type": "string"
+        },
+        "qualifier_string": {
+          "type": "string"
+        },
+        "field_name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "encoding": {
+          "type": "string"
+        },
+        "only_read_latest": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        }
+      }
+    },
+    "biglake_configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "connection_id",
+        "storage_uri"
+      ],
+      "description": "BigLake managed (Iceberg) table stored in Cloud Storage.",
+      "properties": {
+        "connection_id": {
+          "type": "string",
+          "description": "A connection key from this file, or a full connection name."
+        },
+        "storage_uri": {
+          "type": "string",
+          "description": "gs://bucket/path/ (must end with a slash; no wildcards)."
+        },
+        "file_format": {
+          "description": "Defaults to PARQUET.",
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "PARQUET"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "table_format": {
+          "description": "Defaults to ICEBERG.",
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "ICEBERG"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        }
+      }
+    },
+    "view": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "table_id": {
+          "type": "string",
+          "description": "View ID. Defaults to the map key."
+        },
+        "friendly_name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "labels": {
+          "$ref": "#/definitions/labels"
+        },
+        "query": {
+          "type": "string",
+          "description": "View SQL. Mutually exclusive with query_file."
+        },
+        "query_file": {
+          "type": "string",
+          "description": "Path to a .sql file, or a .tftpl template rendered with template_vars."
+        },
+        "use_legacy_sql": {
+          "description": "Defaults to false (GoogleSQL).",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "expiration_time": {
+          "anyOf": [
+            {
+              "type": [
+                "integer",
+                "string"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "deletion_protection": {
+          "description": "Defaults to false for views.",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "deletion_policy": {
+          "$ref": "#/definitions/deletion_policy"
+        },
+        "resource_tags": {
+          "$ref": "#/definitions/resource_tags"
+        },
+        "iam": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/iam_binding"
+          }
+        }
+      }
+    },
+    "materialized_view": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "table_id": {
+          "type": "string",
+          "description": "Materialized view ID. Defaults to the map key."
+        },
+        "friendly_name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "labels": {
+          "$ref": "#/definitions/labels"
+        },
+        "query": {
+          "type": "string"
+        },
+        "query_file": {
+          "type": "string"
+        },
+        "enable_refresh": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "refresh_interval_ms": {
+          "anyOf": [
+            {
+              "type": [
+                "integer",
+                "string"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "allow_non_incremental_definition": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "time_partitioning": {
+          "$ref": "#/definitions/time_partitioning"
+        },
+        "range_partitioning": {
+          "$ref": "#/definitions/range_partitioning"
+        },
+        "clustering": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "string"
+          }
+        },
+        "expiration_time": {
+          "anyOf": [
+            {
+              "type": [
+                "integer",
+                "string"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "max_staleness": {
+          "type": "string"
+        },
+        "encryption_configuration": {
+          "$ref": "#/definitions/encryption_configuration"
+        },
+        "deletion_protection": {
+          "description": "Defaults to the provider default (true).",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "deletion_policy": {
+          "$ref": "#/definitions/deletion_policy"
+        },
+        "resource_tags": {
+          "$ref": "#/definitions/resource_tags"
+        },
+        "iam": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/iam_binding"
+          }
+        }
+      }
+    },
+    "routine": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "routine_id": {
+          "type": "string",
+          "description": "Routine ID. Defaults to the map key."
+        },
+        "routine_type": {
+          "description": "Defaults to SCALAR_FUNCTION.",
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "SCALAR_FUNCTION",
+                "TABLE_VALUED_FUNCTION",
+                "PROCEDURE"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "language": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "SQL",
+                "JAVASCRIPT",
+                "PYTHON",
+                "JAVA",
+                "SCALA"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "definition_body": {
+          "type": "string",
+          "description": "For SQL functions, the expression inside AS ( ... )."
+        },
+        "definition_file": {
+          "type": "string",
+          "description": "Path to a file holding the body; .tftpl files are rendered with template_vars."
+        },
+        "description": {
+          "type": "string"
+        },
+        "arguments": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/routine_argument"
+          }
+        },
+        "return_type": {
+          "$ref": "#/definitions/sql_type"
+        },
+        "return_table_type": {
+          "description": "For table-valued functions: {columns: [{name, type}]} or a JSON string.",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/return_table_type"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "imported_libraries": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "determinism_level": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "DETERMINISM_LEVEL_UNSPECIFIED",
+                "DETERMINISTIC",
+                "NOT_DETERMINISTIC"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "data_governance_type": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "DATA_MASKING"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "security_mode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "DEFINER",
+                "INVOKER"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "remote_function_options": {
+          "$ref": "#/definitions/remote_function_options"
+        },
+        "spark_options": {
+          "$ref": "#/definitions/spark_options"
+        },
+        "deletion_policy": {
+          "$ref": "#/definitions/deletion_policy"
+        },
+        "iam": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/iam_binding"
+          }
+        }
+      }
+    },
+    "routine_argument": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "data_type": {
+          "$ref": "#/definitions/sql_type"
+        },
+        "argument_kind": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "FIXED_TYPE",
+                "ANY_TYPE",
+                "FIXED_TABLE"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "IN",
+                "OUT",
+                "INOUT"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "table_type": {
+          "$ref": "#/definitions/argument_table_type"
+        }
+      }
+    },
+    "argument_table_type": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/table_type_column"
+          }
+        }
+      }
+    },
+    "return_table_type": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "columns"
+      ],
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/table_type_column"
+          }
+        }
+      }
+    },
+    "table_type_column": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/definitions/sql_type"
+        }
+      }
+    },
+    "remote_function_options": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "endpoint": {
+          "type": "string"
+        },
+        "connection": {
+          "type": "string",
+          "description": "A connection key from this file, or a full connection name."
+        },
+        "max_batching_rows": {
+          "anyOf": [
+            {
+              "type": [
+                "integer",
+                "string"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "user_defined_context": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "spark_options": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "connection": {
+          "type": "string",
+          "description": "A connection key from this file, or a full connection name."
+        },
+        "runtime_version": {
+          "type": "string"
+        },
+        "container_image": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "main_file_uri": {
+          "type": "string"
+        },
+        "main_class": {
+          "type": "string"
+        },
+        "py_file_uris": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "jar_uris": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "file_uris": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "archive_uris": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "connection": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "description": "Exactly one of cloud_resource, cloud_sql, aws, azure, cloud_spanner, spark or configuration must be present.",
+      "properties": {
+        "connection_id": {
+          "type": "string",
+          "description": "Connection ID. Defaults to the map key."
+        },
+        "project_id": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string",
+          "description": "Defaults to defaults.location."
+        },
+        "friendly_name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "kms_key_name": {
+          "type": "string"
+        },
+        "deletion_policy": {
+          "$ref": "#/definitions/deletion_policy"
+        },
+        "cloud_resource": {
+          "$ref": "#/definitions/cloud_resource"
+        },
+        "cloud_sql": {
+          "$ref": "#/definitions/cloud_sql"
+        },
+        "aws": {
+          "$ref": "#/definitions/aws"
+        },
+        "azure": {
+          "$ref": "#/definitions/azure"
+        },
+        "cloud_spanner": {
+          "$ref": "#/definitions/cloud_spanner"
+        },
+        "spark": {
+          "$ref": "#/definitions/spark"
+        },
+        "configuration": {
+          "$ref": "#/definitions/connector_configuration"
+        },
+        "iam": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/iam_binding"
+          }
+        }
+      }
+    },
+    "cloud_resource": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {},
+      "description": "Connection backed by a Google-managed service account (BigLake, object tables, remote functions, Vertex AI). Write cloud_resource: {}"
+    },
+    "cloud_sql": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "instance_id",
+        "database",
+        "type",
+        "credential"
+      ],
+      "properties": {
+        "instance_id": {
+          "type": "string",
+          "description": "project:region:instance"
+        },
+        "database": {
+          "type": "string"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "POSTGRES",
+                "MYSQL"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "credential": {
+          "$ref": "#/definitions/cloud_sql_credential"
+        }
+      }
+    },
+    "cloud_sql_credential": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "username",
+        "password_secret"
+      ],
+      "properties": {
+        "username": {
+          "type": "string"
+        },
+        "password_secret": {
+          "type": "string",
+          "description": "Name of an entry in the module's secrets variable. Never put passwords in YAML."
+        }
+      }
+    },
+    "aws": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "access_role"
+      ],
+      "properties": {
+        "access_role": {
+          "$ref": "#/definitions/aws_access_role"
+        }
+      }
+    },
+    "aws_access_role": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "iam_role_id"
+      ],
+      "properties": {
+        "iam_role_id": {
+          "type": "string",
+          "description": "arn:aws:iam::ACCOUNT:role/ROLE"
+        }
+      }
+    },
+    "azure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "customer_tenant_id"
+      ],
+      "properties": {
+        "customer_tenant_id": {
+          "type": "string"
+        },
+        "federated_application_client_id": {
+          "type": "string"
+        }
+      }
+    },
+    "cloud_spanner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "database"
+      ],
+      "properties": {
+        "database": {
+          "type": "string",
+          "description": "projects/P/instances/I/databases/D"
+        },
+        "database_role": {
+          "type": "string"
+        },
+        "use_parallelism": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "use_data_boost": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "max_parallelism": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        }
+      }
+    },
+    "spark": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "metastore_service_config": {
+          "$ref": "#/definitions/spark_metastore_service_config"
+        },
+        "spark_history_server_config": {
+          "$ref": "#/definitions/spark_history_server_config"
+        }
+      }
+    },
+    "spark_metastore_service_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "metastore_service": {
+          "type": "string"
+        }
+      }
+    },
+    "spark_history_server_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dataproc_cluster": {
+          "type": "string"
+        }
+      }
+    },
+    "connector_configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "connector_id",
+        "asset"
+      ],
+      "description": "BigQuery connector framework (AlloyDB, Cloud SQL via connectors, ...).",
+      "properties": {
+        "connector_id": {
+          "type": "string",
+          "description": "e.g. google-alloydb, google-cloudsql-postgres, google-cloudsql-mysql"
+        },
+        "asset": {
+          "$ref": "#/definitions/connector_asset"
+        },
+        "authentication": {
+          "$ref": "#/definitions/connector_authentication"
+        },
+        "endpoint": {
+          "$ref": "#/definitions/connector_endpoint"
+        },
+        "network": {
+          "$ref": "#/definitions/connector_network"
+        }
+      }
+    },
+    "connector_asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "database": {
+          "type": "string"
+        },
+        "google_cloud_resource": {
+          "type": "string"
+        }
+      }
+    },
+    "connector_authentication": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "username_password": {
+          "$ref": "#/definitions/connector_username_password"
+        }
+      }
+    },
+    "connector_username_password": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "username",
+        "password_secret"
+      ],
+      "properties": {
+        "username": {
+          "type": "string"
+        },
+        "password_secret": {
+          "type": "string",
+          "description": "Name of an entry in the module's secrets variable."
+        }
+      }
+    },
+    "connector_endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "host_port": {
+          "type": "string"
+        }
+      }
+    },
+    "connector_network": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "private_service_connect": {
+          "$ref": "#/definitions/connector_private_service_connect"
+        }
+      }
+    },
+    "connector_private_service_connect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "network_attachment"
+      ],
+      "properties": {
+        "network_attachment": {
+          "type": "string"
+        }
+      }
+    },
+    "transfer": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "display_name": {
+          "type": "string",
+          "description": "Defaults to the map key."
+        },
+        "data_source_id": {
+          "type": "string",
+          "description": "scheduled_query, google_cloud_storage, amazon_s3, azure_blob_storage, dcm_dt, google_ads, ..."
+        },
+        "project_id": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string",
+          "description": "Defaults to the destination dataset's location when it is managed here, else defaults.location."
+        },
+        "destination_dataset_id": {
+          "type": "string",
+          "description": "A dataset key from this file, or a dataset ID."
+        },
+        "schedule": {
+          "type": "string",
+          "description": "e.g. 'every 24 hours', 'every day 02:00', 'every mon 09:00'."
+        },
+        "disabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "data_refresh_window_days": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "notification_pubsub_topic": {
+          "type": "string",
+          "description": "projects/P/topics/T"
+        },
+        "service_account_name": {
+          "type": "string"
+        },
+        "query": {
+          "type": "string",
+          "description": "Shortcut for params.query (scheduled queries)."
+        },
+        "query_file": {
+          "type": "string",
+          "description": "Path to a SQL file (or .tftpl template) used as params.query."
+        },
+        "params": {
+          "type": "object",
+          "description": "Data-source-specific parameters. Values are converted to strings.",
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
+              },
+              {
+                "$ref": "#/definitions/template_placeholder"
+              }
+            ]
+          }
+        },
+        "schedule_options": {
+          "$ref": "#/definitions/schedule_options"
+        },
+        "email_preferences": {
+          "$ref": "#/definitions/email_preferences"
+        },
+        "encryption_configuration": {
+          "$ref": "#/definitions/encryption_configuration"
+        },
+        "sensitive_params": {
+          "$ref": "#/definitions/sensitive_params"
+        },
+        "deletion_policy": {
+          "$ref": "#/definitions/deletion_policy"
+        }
+      }
+    },
+    "schedule_options": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "disable_auto_scheduling": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        },
+        "start_time": {
+          "type": "string",
+          "description": "RFC3339 timestamp."
+        },
+        "end_time": {
+          "type": "string",
+          "description": "RFC3339 timestamp."
+        }
+      }
+    },
+    "email_preferences": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enable_failure_email"
+      ],
+      "properties": {
+        "enable_failure_email": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        }
+      }
+    },
+    "sensitive_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "secret_access_key_secret"
+      ],
+      "properties": {
+        "secret_access_key_secret": {
+          "type": "string",
+          "description": "Name of an entry in the module's secrets variable (e.g. the AWS secret access key for amazon_s3 transfers)."
+        }
+      }
+    },
+    "template_placeholder": {
+      "type": "string",
+      "pattern": "^.*\\$\\{[^}]+\\}.*$",
+      "description": "A ${...} placeholder, replaced when the module renders the file with templatefile()."
+    }
+  }
+}

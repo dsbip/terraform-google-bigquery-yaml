@@ -1,0 +1,236 @@
+# yaml-language-server: $schema=../../schemas/bigquery-config.schema.json
+#
+# A complete analytics platform for an online shop, using every feature of the
+# module in one file:
+#
+#   connections    lake (BigLake), remote (remote functions)
+#   raw            landing tables and a BigLake table over the data lake
+#   core           the curated model: keys, partitioning, clustering, a
+#                  materialized view
+#   udfs           shared functions: SQL, masking, table-valued, procedure,
+#                  remote
+#   reporting      analyst views; the whole dataset is authorized on core
+#   partner_share  one authorized view for a partner, shared with table IAM
+#   transfers      a Cloud Storage load and two scheduled queries
+#
+# Placeholders such as $${analysts_group} come from template_vars in main.tf.
+# (Comments are rendered too, hence the $$ escape in this line.)
+
+defaults:
+  location: EU
+  labels:
+    platform: shop-analytics
+  datasets:
+    delete_contents_on_destroy: true # examples only
+    max_time_travel_hours: 168
+    access:
+      # Prepended to every dataset's own access list.
+      - role: OWNER
+        members:
+          - group:${platform_team_group}
+  tables:
+    deletion_protection: false # examples only
+  materialized_views:
+    deletion_protection: false # examples only
+    enable_refresh: true
+    refresh_interval_ms: 1800000
+  transfers:
+    email_preferences:
+      enable_failure_email: true
+
+connections:
+  lake:
+    description: Reads the shop data lake bucket.
+    cloud_resource: {}
+  remote:
+    description: Calls Cloud Run services from SQL.
+    cloud_resource: {}
+    iam:
+      - role: roles/bigquery.connectionUser
+        members:
+          - group:${analysts_group}
+
+datasets:
+  raw:
+    description: Data as it arrives from the shop and the data lake.
+    labels: { layer: raw }
+    tables:
+      orders:
+        description: Order events loaded from Cloud Storage every hour.
+        schema_file: schemas/raw_orders.json
+        time_partitioning: { type: DAY } # ingestion time
+      customers:
+        schema:
+          - { name: customer_id, type: STRING, mode: REQUIRED }
+          - { name: email, type: STRING }
+          - { name: country_code, type: STRING }
+          - { name: updated_at, type: TIMESTAMP }
+      clickstream:
+        description: Web events in the data lake, read through BigLake.
+        schema:
+          - { name: session_id, type: STRING }
+          - { name: customer_id, type: STRING }
+          - { name: page, type: STRING }
+          - { name: event_time, type: TIMESTAMP }
+        external_data_configuration:
+          source_format: PARQUET
+          source_uris: ["gs://${lake_bucket}/clickstream/*.parquet"]
+          connection_id: lake
+          metadata_cache_mode: AUTOMATIC
+        max_staleness: "0-0 0 1:0:0"
+
+  core:
+    description: Curated, conformed model.
+    labels: { layer: core }
+    authorized_datasets: [reporting]
+    authorized_views: [partner_share.partner_daily_sales]
+    authorized_routines: [udfs.customer_orders]
+    tables:
+      dim_customer:
+        schema:
+          - { name: customer_id, type: STRING, mode: REQUIRED }
+          - { name: email, type: STRING, description: Normalised email }
+          - { name: country_code, type: STRING }
+          - { name: first_order_date, type: DATE }
+        table_constraints:
+          primary_key: { columns: [customer_id] }
+      fct_orders:
+        schema_file: schemas/fct_orders.yaml
+        time_partitioning:
+          field: order_date
+        clustering: [customer_id, status]
+        table_constraints:
+          primary_key: { columns: [order_id] }
+          foreign_keys:
+            - name: fk_orders_customer
+              referenced_table: core.dim_customer
+              column_references:
+                referencing_column: customer_id
+                referenced_column: customer_id
+    materialized_views:
+      mv_daily_sales:
+        description: Revenue per day and country, refreshed incrementally.
+        query: |
+          SELECT order_date, country_code, COUNT(*) AS orders, SUM(amount) AS revenue
+          FROM `${project_id}.core.fct_orders`
+          WHERE status = 'COMPLETED'
+          GROUP BY order_date, country_code
+        time_partitioning:
+          field: order_date
+        clustering: [country_code]
+
+  udfs:
+    description: Shared routines.
+    access:
+      - role: READER
+        members: [specialGroup:projectReaders]
+    routines:
+      normalize_email:
+        arguments:
+          - { name: email, data_type: STRING }
+        return_type: STRING
+        definition_body: LOWER(TRIM(email))
+      mask_email:
+        data_governance_type: DATA_MASKING
+        language: SQL
+        arguments:
+          - { name: email, data_type: STRING }
+        return_type: STRING
+        definition_body: REGEXP_REPLACE(email, r'^[^@]+', 'xxxxx')
+      customer_orders:
+        description: Orders of one customer in a date range.
+        routine_type: TABLE_VALUED_FUNCTION
+        arguments:
+          - { name: customer, data_type: STRING }
+          - { name: from_date, data_type: DATE }
+          - { name: to_date, data_type: DATE }
+        definition_body: |
+          SELECT order_id, order_date, amount, status
+          FROM `${project_id}.core.fct_orders`
+          WHERE customer_id = customer AND order_date BETWEEN from_date AND to_date
+        return_table_type:
+          columns:
+            - { name: order_id, type: STRING }
+            - { name: order_date, type: DATE }
+            - { name: amount, type: NUMERIC }
+            - { name: status, type: STRING }
+      rebuild_dim_customer:
+        description: Rebuilds core.dim_customer from raw data.
+        routine_type: PROCEDURE
+        definition_file: sql/rebuild_dim_customer.sql.tftpl
+      review_sentiment:
+        description: Scores review text with a Cloud Run service.
+        arguments:
+          - { name: review, data_type: STRING }
+        return_type: FLOAT64
+        remote_function_options:
+          endpoint: ${sentiment_service_url}
+          connection: remote
+
+  reporting:
+    description: Analyst-facing views.
+    labels: { layer: reporting }
+    access:
+      - role: READER
+        members:
+          - group:${analysts_group}
+    views:
+      customer_360:
+        description: Customers with their order history.
+        query_file: sql/customer_360.sql.tftpl
+      sales_by_country:
+        query: |
+          SELECT country_code, SUM(revenue) AS revenue
+          FROM `${project_id}.core.mv_daily_sales`
+          WHERE order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
+          GROUP BY country_code
+
+  partner_share:
+    description: Data shared with the logistics partner.
+    views:
+      partner_daily_sales:
+        description: Orders per day and country; no customer data.
+        query: |
+          SELECT order_date, country_code, COUNT(*) AS orders
+          FROM `${project_id}.core.fct_orders`
+          WHERE order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+          GROUP BY order_date, country_code
+        iam:
+          - role: roles/bigquery.dataViewer
+            members:
+              - serviceAccount:${partner_service_account}
+
+transfers:
+  load_raw_orders:
+    display_name: Load raw orders from Cloud Storage
+    data_source_id: google_cloud_storage
+    destination_dataset_id: raw
+    schedule: every 1 hours
+    params:
+      data_path_template: gs://${lake_bucket}/exports/orders/*.json
+      destination_table_name_template: orders
+      file_format: JSON
+      write_disposition: APPEND
+
+  rebuild_dim_customer_nightly:
+    display_name: Rebuild dim_customer
+    data_source_id: scheduled_query
+    location: EU
+    schedule: every day 03:00
+    query: CALL `${project_id}.udfs.rebuild_dim_customer`()
+
+  weekly_top_customers:
+    display_name: Weekly top customers
+    data_source_id: scheduled_query
+    destination_dataset_id: reporting
+    schedule: every monday 06:00
+    query: |
+      SELECT customer_id, SUM(amount) AS revenue
+      FROM `${project_id}.core.fct_orders`
+      WHERE order_date >= DATE_SUB(@run_date, INTERVAL 7 DAY)
+      GROUP BY customer_id
+      ORDER BY revenue DESC
+      LIMIT 100
+    params:
+      destination_table_name_template: "top_customers_{run_date}"
+      write_disposition: WRITE_TRUNCATE

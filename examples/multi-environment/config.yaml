@@ -1,0 +1,56 @@
+# yaml-language-server: $schema=../../schemas/bigquery-config.schema.json
+#
+# One configuration, several environments. The module renders this file with
+# templatefile() once per environment (see main.tf), replacing each $${...}
+# before the YAML is parsed:
+#
+#   $${env}                          dev | prod
+#   $${location}                     BigQuery location of the environment
+#   $${protect}                      true in prod: deletion protection on tables
+#   $${delete_contents}              false in prod: never drop tables with the dataset
+#   $${deletion_policy}              PREVENT in prod: terraform destroy fails
+#   $${raw_partition_expiration_ms}  retention of raw partitions
+#   $${analysts_group}               group that reads the curated data
+#
+# Comments are rendered too, which is why placeholders above are written $$.
+# Keep placeholders as whole values or parts of strings, as below, so the file
+# stays valid YAML for editors and linters before rendering.
+
+defaults:
+  location: ${location}
+  labels:
+    environment: ${env}
+  tables:
+    deletion_protection: ${protect}
+  datasets:
+    delete_contents_on_destroy: ${delete_contents}
+    deletion_policy: ${deletion_policy}
+
+datasets:
+  raw:
+    # The dataset ID carries the environment; the key stays "raw", so other
+    # entries and SQL templates refer to it the same way in every environment.
+    dataset_id: raw_${env}
+    description: Raw ingested data (${env}).
+    default_partition_expiration_ms: ${raw_partition_expiration_ms}
+    # Views in curated read raw without analysts having access to raw.
+    authorized_datasets: [curated]
+    tables:
+      customers:
+        schema_file: schemas/customers.json
+        time_partitioning:
+          field: ingested_at
+
+  curated:
+    dataset_id: curated_${env}
+    description: Cleaned, analysis-ready data (${env}).
+    access:
+      - role: READER
+        members:
+          - group:${analysts_group}
+    views:
+      customers:
+        description: Latest version of every customer.
+        # $${project_id} and $${datasets.raw} inside this file resolve to the
+        # environment's project and raw_<env>.
+        query_file: sql/customers_latest.sql.tftpl

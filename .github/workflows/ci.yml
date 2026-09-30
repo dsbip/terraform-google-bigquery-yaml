@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: fmt and validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive
+      - run: terraform init -input=false -backend=false
+      - run: terraform validate
+
+  unit:
+    # Mock providers need Terraform >= 1.7. The mocked provider still supplies
+    # the real schema, so the provider version matters too.
+    name: terraform test (terraform ${{ matrix.terraform }}, google ${{ matrix.provider }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        terraform: ["1.7.5", "latest"]
+        provider: ["7.42.0", "latest"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ matrix.terraform }}
+          terraform_wrapper: false
+      - name: Pin the provider version
+        if: matrix.provider != 'latest'
+        run: |
+          cat > ci_versions_override.tf <<'EOF'
+          terraform {
+            required_providers {
+              google = {
+                source  = "hashicorp/google"
+                version = "${{ matrix.provider }}"
+              }
+            }
+          }
+          EOF
+      - run: terraform init -input=false -backend=false
+      - run: terraform test
+
+  plans:
+    # Real-provider plans of every example (dummy token, no Google Cloud access)
+    # and JSON Schema checks. The first entry proves the minimum versions.
+    name: example plans (terraform ${{ matrix.terraform }}, google ${{ matrix.provider || 'latest' }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - terraform: "1.5.7"
+            provider: "7.42.0"
+          - terraform: latest
+            provider: ""
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ matrix.terraform }}
+          terraform_wrapper: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install -r tests/python/requirements.txt
+      - run: python -m pytest tests/python -v
+        env:
+          GOOGLE_PROVIDER_VERSION: ${{ matrix.provider }}

@@ -1,0 +1,117 @@
+# yaml-language-server: $schema=../../schemas/bigquery-config.schema.json
+#
+# BigQuery connections and the resources that use them.
+#
+# A connection's type is the one type key it contains (cloud_resource, cloud_sql,
+# aws, azure, cloud_spanner, spark or configuration). Tables and routines
+# reference connections by their key in this file.
+#
+# Prerequisites: the BigQuery Connection API is enabled. After apply, grant the
+# connection service accounts (output connections.*.service_account_id) access to
+# the underlying resources, e.g. roles/storage.objectViewer on the lake bucket.
+
+defaults:
+  location: US
+  tables:
+    deletion_protection: false
+  datasets:
+    delete_contents_on_destroy: true
+
+connections:
+  # Google-managed service account for BigLake and object tables.
+  lake:
+    friendly_name: Data lake
+    description: Reads the Cloud Storage data lake.
+    cloud_resource: {}
+    iam:
+      - role: roles/bigquery.connectionUser
+        members:
+          - group:${analysts_group}
+
+  # Federated queries against Cloud SQL for PostgreSQL. The password is passed
+  # through the module's secrets variable.
+  orders_db:
+    friendly_name: Orders database
+    location: us-central1 # must match the Cloud SQL instance region
+    cloud_sql:
+      instance_id: ${project_id}:us-central1:orders-db
+      database: orders
+      type: POSTGRES
+      credential:
+        username: bq_reader
+        password_secret: orders_db_password
+
+  # Federated queries against Cloud Spanner using Data Boost.
+  catalog_spanner:
+    cloud_spanner:
+      database: projects/${project_id}/instances/catalog/databases/products
+      use_parallelism: true
+      use_data_boost: true
+      max_parallelism: 8
+
+  # BigQuery Omni: query data in Amazon S3 and Azure Blob Storage.
+  aws_lake:
+    location: aws-us-east-1
+    aws:
+      access_role:
+        iam_role_id: arn:aws:iam::123456789012:role/bigquery-omni
+  azure_lake:
+    location: azure-eastus2
+    azure:
+      customer_tenant_id: 00000000-0000-0000-0000-000000000000
+      federated_application_client_id: 11111111-1111-1111-1111-111111111111
+
+  # Runs stored procedures for Apache Spark.
+  spark:
+    spark: {}
+
+datasets:
+  lakehouse:
+    description: Tables over the Cloud Storage data lake.
+
+    tables:
+      # BigLake table: Parquet files read through the lake connection, with
+      # metadata caching. With a connection the schema goes to the table.
+      sales_biglake:
+        schema:
+          - { name: sale_id, type: STRING }
+          - { name: amount, type: NUMERIC }
+          - { name: sold_at, type: TIMESTAMP }
+        max_staleness: "0-0 0 4:0:0" # accept metadata up to 4 hours old
+        external_data_configuration:
+          source_format: PARQUET
+          source_uris: ["gs://${lake_bucket}/sales/*.parquet"]
+          connection_id: lake
+          metadata_cache_mode: AUTOMATIC
+
+      # Object table: one row per object (image files here).
+      product_images:
+        external_data_configuration:
+          object_metadata: SIMPLE
+          source_uris: ["gs://${lake_bucket}/images/*"]
+          connection_id: lake
+          metadata_cache_mode: AUTOMATIC
+
+      # BigLake managed table in Apache Iceberg format.
+      events_iceberg:
+        schema:
+          - { name: event_id, type: STRING }
+          - { name: payload, type: JSON }
+          - { name: event_time, type: TIMESTAMP }
+        biglake_configuration:
+          connection_id: lake
+          storage_uri: gs://${lake_bucket}/iceberg/events/
+          file_format: PARQUET
+          table_format: ICEBERG
+
+    routines:
+      # Stored procedure for Apache Spark, running a PySpark file.
+      compact_small_files:
+        routine_type: PROCEDURE
+        language: PYTHON
+        spark_options:
+          connection: spark # connection key from this file
+          runtime_version: "2.1"
+          main_file_uri: gs://${lake_bucket}/jobs/compact_small_files.py
+          properties:
+            spark.executor.instances: "2"

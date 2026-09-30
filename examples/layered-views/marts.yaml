@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=../../schemas/bigquery-config.schema.json
+#
+# Layer 2: views on top of the layer-1 views in base.yaml. This file is applied
+# by a second module call that depends on the first one (see main.tf), so the
+# views it selects from exist before BigQuery validates these queries.
+
+defaults:
+  location: US
+
+datasets:
+  # staging is created by base.yaml; here we only authorize the marts views on
+  # it, so readers of marts do not need access to staging.
+  staging:
+    create: false
+    authorized_datasets:
+      - marts
+
+  marts:
+    description: Business-facing views.
+    delete_contents_on_destroy: true
+    access:
+      - role: READER
+        members:
+          - specialGroup:projectReaders
+    views:
+      customer_revenue:
+        query: |
+          SELECT customer_id, SUM(amount) AS revenue
+          FROM `${project_id}.staging.orders`
+          WHERE status = 'COMPLETED'
+          GROUP BY customer_id
+      daily_revenue:
+        query: |
+          SELECT DATE(loaded_at) AS day, SUM(amount) AS revenue
+          FROM `${project_id}.staging.orders`
+          WHERE status = 'COMPLETED'
+          GROUP BY day

@@ -1,0 +1,8 @@
+# Live test: a connection (needs the BigQuery Connection API).
+
+connections:
+  lake:
+    connection_id: bqyaml_${suffix}_lake
+    location: ${location}
+    friendly_name: Integration test connection
+    cloud_resource: {}

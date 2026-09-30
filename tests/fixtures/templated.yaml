@@ -1,0 +1,16 @@
+# Rendered with templatefile() by the module. Comments are rendered too, so a
+# literal placeholder must be escaped: $${not_a_variable}.
+defaults:
+  location: ${location}
+  labels:
+    environment: ${env}
+
+datasets:
+  events:
+    dataset_id: events_${env}
+    description: Events for ${env} in ${project_id}
+    views:
+      latest:
+        query_file: sql/latest.sql.tftpl
+      static:
+        query_file: sql/static.sql

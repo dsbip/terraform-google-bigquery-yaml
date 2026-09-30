@@ -1,0 +1,17 @@
+-- This file ends in .tftpl, so the module renders it with templatefile():
+-- project_id and datasets.<dataset key> are available, plus template_vars.
+BEGIN
+  DECLARE cutoff TIMESTAMP DEFAULT TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL older_than_days DAY);
+
+  SET archived = (
+    SELECT COUNT(*)
+    FROM `${project_id}.${datasets.udfs}.orders`
+    WHERE status = 'CANCELLED' AND ordered_at < cutoff
+  );
+
+  DELETE FROM `${project_id}.${datasets.udfs}.orders`
+  WHERE status = 'CANCELLED' AND ordered_at < cutoff;
+
+  INSERT INTO `${project_id}.${datasets.udfs}.order_audit` (run_at, archived_orders)
+  VALUES (CURRENT_TIMESTAMP(), archived);
+END
