@@ -11,29 +11,33 @@ datasets:
       - role: WRITER
         members: [group:hr-team@example.com]
     authorized_views:
-      - hr_shared.employee_directory       # "<dataset key>.<view key>"
-      - hr_shared.headcount_by_department
+      - employee_directory                 # a view key from this file
+      - hr_shared.headcount_by_department  # or "<dataset key>.<view key>"
     authorized_datasets:
       - hr_analytics                       # every view in hr_analytics
     authorized_routines:
-      - hr_shared.employees_in_department  # a table-valued function
-    tables:
-      employees: { ... }
+      - employees_in_department            # a table-valued function
 
   hr_shared:                         # what employees may read
     access:
       - role: READER
         members: [group:all-employees@example.com]
-    views:
-      employee_directory:
-        query: SELECT employee_id, full_name, email FROM `${project_id}.hr_private.employees`
-      headcount_by_department:
-        query: SELECT department, COUNT(*) AS headcount FROM `${project_id}.hr_private.employees` GROUP BY department
-    routines:
-      employees_in_department: { ... }
 
-  hr_analytics:
-    views: { ... }
+  hr_analytics: {}                   # its views are in the views section
+
+tables:
+  employees: { dataset: hr_private, ... }
+
+views:
+  employee_directory:
+    dataset: hr_shared
+    query: SELECT employee_id, full_name, email FROM `${project_id}.hr_private.employees`
+  headcount_by_department:
+    dataset: hr_shared
+    query: SELECT department, COUNT(*) AS headcount FROM `${project_id}.hr_private.employees` GROUP BY department
+
+routines:
+  employees_in_department: { dataset: hr_shared, ... }
 ```
 
 People in `all-employees` can query the views in `hr_shared` but not `hr_private.employees`. The [authorized-views example](../examples/authorized-views) is a complete version.
@@ -42,13 +46,13 @@ People in `all-employees` can query the views in `hr_shared` but not `hr_private
 
 | List | Entry forms |
 |---|---|
-| `authorized_views` | `"dataset.view"`, `"project.dataset.view"`, `{project_id, dataset_id, table_id}` |
+| `authorized_views` | `"view key"`, `"dataset.view"`, `"project.dataset.view"`, `{project_id, dataset_id, table_id}` |
 | `authorized_datasets` | `"dataset"`, `"project.dataset"`, `{project_id, dataset_id, target_types}` |
-| `authorized_routines` | `"dataset.routine"`, `"project.dataset.routine"`, `{project_id, dataset_id, routine_id}` |
+| `authorized_routines` | `"routine key"`, `"dataset.routine"`, `"project.dataset.routine"`, `{project_id, dataset_id, routine_id}` |
 
 String references resolve in this order:
 
-1. A view, materialized view or routine **declared in this file** with that key (`hr_shared.employee_directory`) → its real project, dataset ID and ID, including any `dataset_id` / `table_id` / `routine_id` overrides.
+1. A view, materialized view or routine **declared in this file**, written as `"<dataset key>.<key>"` (`hr_shared.employee_directory`) or as its key alone (`employee_directory`) → its real project, dataset ID and ID, including any `dataset_id` / `table_id` / `routine_id` overrides. If a view and a materialized view share a key, use the `"<dataset key>.<key>"` form.
 2. A dataset key from this file followed by a name (`hr_shared.some_view`) → that dataset's real IDs.
 3. Otherwise the reference is used as written; without a project, the source dataset's project is used.
 

@@ -15,7 +15,7 @@ A `template_vars` entry with the same name as a built-in (`project_id`, `dataset
 
 ```hcl
 module "bigquery" {
-  source      = "github.com/dsbip/terraform-google-bigquery-yaml?ref=v1.0.0"
+  source      = "github.com/dsbip/terraform-google-bigquery-yaml?ref=v2.0.0"
   project_id  = "analytics-prod"
   config_file = "${path.module}/bigquery.yaml"
 
@@ -102,7 +102,7 @@ Use `for_each` on the module and derive the per-environment values in HCL:
 
 ```hcl
 module "bigquery" {
-  source   = "github.com/dsbip/terraform-google-bigquery-yaml?ref=v1.0.0"
+  source   = "github.com/dsbip/terraform-google-bigquery-yaml?ref=v2.0.0"
   for_each = var.environments                       # { dev = {...}, prod = {...} }
 
   project_id  = each.value.project_id

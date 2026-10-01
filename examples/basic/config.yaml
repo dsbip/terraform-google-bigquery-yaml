@@ -2,6 +2,9 @@
 #
 # Basic example: one dataset with two tables and a view.
 #
+# Datasets, tables and views are separate sections. A table or view is not
+# indented under its dataset; it names it with `dataset: <key>`.
+#
 # The project comes from the module's project_id variable (see main.tf). The
 # module renders this file with templatefile() before parsing it, so the
 # project_id placeholder in the view SQL below becomes that project.
@@ -25,32 +28,35 @@ datasets:
         members:
           - specialGroup:projectReaders
 
-    tables:
-      customers:
-        description: One row per customer.
-        schema:
-          - { name: customer_id, type: STRING, mode: REQUIRED, description: Primary key }
-          - { name: email, type: STRING }
-          - { name: country, type: STRING }
-          - { name: created_at, type: TIMESTAMP, mode: REQUIRED }
+tables:
+  customers:
+    dataset: sales
+    description: One row per customer.
+    schema:
+      - { name: customer_id, type: STRING, mode: REQUIRED, description: Primary key }
+      - { name: email, type: STRING }
+      - { name: country, type: STRING }
+      - { name: created_at, type: TIMESTAMP, mode: REQUIRED }
 
-      orders:
-        description: One row per order, partitioned by order date.
-        schema:
-          - { name: order_id, type: STRING, mode: REQUIRED }
-          - { name: customer_id, type: STRING, mode: REQUIRED }
-          - { name: amount, type: NUMERIC }
-          - { name: ordered_at, type: TIMESTAMP, mode: REQUIRED }
-        time_partitioning:
-          type: DAY
-          field: ordered_at
-        clustering: [customer_id]
+  orders:
+    dataset: sales
+    description: One row per order, partitioned by order date.
+    schema:
+      - { name: order_id, type: STRING, mode: REQUIRED }
+      - { name: customer_id, type: STRING, mode: REQUIRED }
+      - { name: amount, type: NUMERIC }
+      - { name: ordered_at, type: TIMESTAMP, mode: REQUIRED }
+    time_partitioning:
+      type: DAY
+      field: ordered_at
+    clustering: [customer_id]
 
-    views:
-      revenue_by_country:
-        description: Revenue per customer country.
-        query: |
-          SELECT c.country, SUM(o.amount) AS revenue
-          FROM `${project_id}.sales.orders` AS o
-          JOIN `${project_id}.sales.customers` AS c USING (customer_id)
-          GROUP BY c.country
+views:
+  revenue_by_country:
+    dataset: sales
+    description: Revenue per customer country.
+    query: |
+      SELECT c.country, SUM(o.amount) AS revenue
+      FROM `${project_id}.sales.orders` AS o
+      JOIN `${project_id}.sales.customers` AS c USING (customer_id)
+      GROUP BY c.country

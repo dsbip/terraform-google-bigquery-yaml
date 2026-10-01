@@ -21,110 +21,118 @@ datasets:
     max_time_travel_hours: 72
     storage_billing_model: PHYSICAL
 
-    tables:
-      # Schema from a JSON file (same format as `bq show --schema`), with
-      # nested and repeated fields. Hourly partitions on a column; queries must
-      # filter on the partition column.
-      page_views:
-        description: Raw page view events.
-        schema_file: schemas/page_views.json
-        time_partitioning:
-          type: HOUR
-          field: event_time
-          expiration_ms: 7776000000 # 90 days
-        require_partition_filter: true
-        clustering: [user_id, page]
-
-      # Schema from a YAML file. Ingestion-time partitioning (no field).
-      sessions:
-        description: Sessionised events, loaded hourly.
-        schema_file: schemas/sessions.yaml
-        time_partitioning:
-          type: DAY
-
-      # Integer-range partitioning: 100 partitions of 10,000 customer IDs each.
-      customer_scores:
-        description: Daily propensity scores per customer.
-        schema:
-          - { name: customer_id, type: INT64, mode: REQUIRED }
-          - { name: score, type: FLOAT64 }
-          - { name: scored_at, type: DATE }
-        range_partitioning:
-          field: customer_id
-          range: { start: 0, end: 1000000, interval: 10000 }
-
-      # Primary and foreign keys (informational, not enforced; the optimiser
-      # uses them for join elimination).
-      users:
-        schema:
-          - { name: user_id, type: STRING, mode: REQUIRED }
-          - { name: signup_date, type: DATE }
-        table_constraints:
-          primary_key:
-            columns: [user_id]
-
-      purchases:
-        schema:
-          - { name: purchase_id, type: STRING, mode: REQUIRED }
-          - { name: user_id, type: STRING, mode: REQUIRED }
-          - { name: amount, type: NUMERIC, mode: REQUIRED }
-          - { name: purchased_at, type: TIMESTAMP }
-        table_constraints:
-          primary_key:
-            columns: [purchase_id]
-          foreign_keys:
-            - name: fk_purchases_users
-              referenced_table: events.users # dataset key . table key
-              column_references:
-                referencing_column: user_id
-                referenced_column: user_id
-
-      # A scratch table that deletes itself (milliseconds since the epoch).
-      backfill_scratch:
-        description: Temporary table for a one-off backfill.
-        expiration_time: 1893456000000 # 2030-01-01T00:00:00Z
-        schema:
-          - { name: payload, type: JSON }
-
   landing:
     description: External tables over files in Cloud Storage.
     delete_contents_on_destroy: true
 
-    tables:
-      # CSV files with an explicit schema. The module sends the schema to
-      # external_data_configuration because no connection is used.
-      daily_orders_csv:
-        schema:
-          - { name: order_id, type: STRING }
-          - { name: amount, type: NUMERIC }
-          - { name: order_date, type: DATE }
-        external_data_configuration:
-          source_format: CSV
-          source_uris: ["gs://${landing_bucket}/orders/*.csv"]
-          csv_options:
-            skip_leading_rows: 1
-            field_delimiter: ","
-            allow_quoted_newlines: true
-          max_bad_records: 10
+tables:
+  # Schema from a JSON file (same format as `bq show --schema`), with
+  # nested and repeated fields. Hourly partitions on a column; queries must
+  # filter on the partition column.
+  page_views:
+    dataset: events
+    description: Raw page view events.
+    schema_file: schemas/page_views.json
+    time_partitioning:
+      type: HOUR
+      field: event_time
+      expiration_ms: 7776000000 # 90 days
+    require_partition_filter: true
+    clustering: [user_id, page]
 
-      # Hive-partitioned Parquet with schema autodetection (autodetect defaults
-      # to true when no schema is given).
-      clickstream_parquet:
-        external_data_configuration:
-          source_format: PARQUET
-          source_uris: ["gs://${landing_bucket}/clickstream/*"]
-          hive_partitioning_options:
-            mode: AUTO
-            source_uri_prefix: "gs://${landing_bucket}/clickstream/"
-            require_partition_filter: true
-          parquet_options:
-            enable_list_inference: true
+  # Schema from a YAML file. Ingestion-time partitioning (no field).
+  sessions:
+    dataset: events
+    description: Sessionised events, loaded hourly.
+    schema_file: schemas/sessions.yaml
+    time_partitioning:
+      type: DAY
 
-      # Newline-delimited JSON with a schema from file.
-      webhooks_json:
-        schema_file: schemas/webhooks.json
-        external_data_configuration:
-          source_format: NEWLINE_DELIMITED_JSON
-          source_uris: ["gs://${landing_bucket}/webhooks/*.json"]
-          compression: GZIP
-          ignore_unknown_values: true
+  # Integer-range partitioning: 100 partitions of 10,000 customer IDs each.
+  customer_scores:
+    dataset: events
+    description: Daily propensity scores per customer.
+    schema:
+      - { name: customer_id, type: INT64, mode: REQUIRED }
+      - { name: score, type: FLOAT64 }
+      - { name: scored_at, type: DATE }
+    range_partitioning:
+      field: customer_id
+      range: { start: 0, end: 1000000, interval: 10000 }
+
+  # Primary and foreign keys (informational, not enforced; the optimiser
+  # uses them for join elimination).
+  users:
+    dataset: events
+    schema:
+      - { name: user_id, type: STRING, mode: REQUIRED }
+      - { name: signup_date, type: DATE }
+    table_constraints:
+      primary_key:
+        columns: [user_id]
+
+  purchases:
+    dataset: events
+    schema:
+      - { name: purchase_id, type: STRING, mode: REQUIRED }
+      - { name: user_id, type: STRING, mode: REQUIRED }
+      - { name: amount, type: NUMERIC, mode: REQUIRED }
+      - { name: purchased_at, type: TIMESTAMP }
+    table_constraints:
+      primary_key:
+        columns: [purchase_id]
+      foreign_keys:
+        - name: fk_purchases_users
+          referenced_table: users # table key (or "events.users")
+          column_references:
+            referencing_column: user_id
+            referenced_column: user_id
+
+  # A scratch table that deletes itself (milliseconds since the epoch).
+  backfill_scratch:
+    dataset: events
+    description: Temporary table for a one-off backfill.
+    expiration_time: 1893456000000 # 2030-01-01T00:00:00Z
+    schema:
+      - { name: payload, type: JSON }
+
+  # CSV files with an explicit schema. The module sends the schema to
+  # external_data_configuration because no connection is used.
+  daily_orders_csv:
+    dataset: landing
+    schema:
+      - { name: order_id, type: STRING }
+      - { name: amount, type: NUMERIC }
+      - { name: order_date, type: DATE }
+    external_data_configuration:
+      source_format: CSV
+      source_uris: ["gs://${landing_bucket}/orders/*.csv"]
+      csv_options:
+        skip_leading_rows: 1
+        field_delimiter: ","
+        allow_quoted_newlines: true
+      max_bad_records: 10
+
+  # Hive-partitioned Parquet with schema autodetection (autodetect defaults
+  # to true when no schema is given).
+  clickstream_parquet:
+    dataset: landing
+    external_data_configuration:
+      source_format: PARQUET
+      source_uris: ["gs://${landing_bucket}/clickstream/*"]
+      hive_partitioning_options:
+        mode: AUTO
+        source_uri_prefix: "gs://${landing_bucket}/clickstream/"
+        require_partition_filter: true
+      parquet_options:
+        enable_list_inference: true
+
+  # Newline-delimited JSON with a schema from file.
+  webhooks_json:
+    dataset: landing
+    schema_file: schemas/webhooks.json
+    external_data_configuration:
+      source_format: NEWLINE_DELIMITED_JSON
+      source_uris: ["gs://${landing_bucket}/webhooks/*.json"]
+      compression: GZIP
+      ignore_unknown_values: true

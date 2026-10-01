@@ -30,24 +30,12 @@ datasets:
           - group:${hr_team_group}
     # Views, datasets and routines allowed to read this dataset.
     authorized_views:
-      - hr_shared.employee_directory # "<dataset key>.<view key>" from this file
-      - hr_shared.headcount_by_department
+      - employee_directory # a view key from this file
+      - hr_shared.headcount_by_department # or "<dataset key>.<view key>"
     authorized_datasets:
       - hr_analytics # every view in hr_analytics
     authorized_routines:
-      - hr_shared.employees_in_department # a table-valued function
-
-    tables:
-      employees:
-        schema:
-          - { name: employee_id, type: STRING, mode: REQUIRED }
-          - { name: full_name, type: STRING }
-          - { name: email, type: STRING }
-          - { name: department, type: STRING }
-          - { name: manager_id, type: STRING }
-          - { name: salary, type: NUMERIC, description: Annual gross salary }
-          - { name: national_id, type: STRING, description: Sensitive }
-          - { name: hired_on, type: DATE }
+      - employees_in_department # a table-valued function (routine key)
 
   hr_shared:
     description: Employee-facing views over hr_private.
@@ -56,37 +44,6 @@ datasets:
         members:
           - group:${all_employees_group}
 
-    views:
-      employee_directory:
-        description: Names, emails and departments only.
-        query: |
-          SELECT employee_id, full_name, email, department, manager_id
-          FROM `${project_id}.hr_private.employees`
-
-      headcount_by_department:
-        description: Aggregated headcount; no individual rows.
-        query: |
-          SELECT department, COUNT(*) AS headcount
-          FROM `${project_id}.hr_private.employees`
-          GROUP BY department
-
-    routines:
-      employees_in_department:
-        description: Directory entries for one department.
-        routine_type: TABLE_VALUED_FUNCTION
-        language: SQL
-        arguments:
-          - { name: dept, data_type: STRING }
-        definition_body: |
-          SELECT employee_id, full_name, email
-          FROM `${project_id}.hr_private.employees`
-          WHERE department = dept
-        return_table_type:
-          columns:
-            - { name: employee_id, type: STRING }
-            - { name: full_name, type: STRING }
-            - { name: email, type: STRING }
-
   hr_analytics:
     description: Analyst views; the whole dataset is authorized on hr_private.
     access:
@@ -94,11 +51,58 @@ datasets:
         members:
           - group:${people_analytics_group}
 
-    views:
-      tenure_distribution:
-        query: |
-          SELECT department,
-                 DATE_DIFF(CURRENT_DATE(), hired_on, YEAR) AS tenure_years,
-                 COUNT(*) AS employees
-          FROM `${project_id}.hr_private.employees`
-          GROUP BY department, tenure_years
+tables:
+  employees:
+    dataset: hr_private
+    schema:
+      - { name: employee_id, type: STRING, mode: REQUIRED }
+      - { name: full_name, type: STRING }
+      - { name: email, type: STRING }
+      - { name: department, type: STRING }
+      - { name: manager_id, type: STRING }
+      - { name: salary, type: NUMERIC, description: Annual gross salary }
+      - { name: national_id, type: STRING, description: Sensitive }
+      - { name: hired_on, type: DATE }
+
+views:
+  employee_directory:
+    dataset: hr_shared
+    description: Names, emails and departments only.
+    query: |
+      SELECT employee_id, full_name, email, department, manager_id
+      FROM `${project_id}.hr_private.employees`
+
+  headcount_by_department:
+    dataset: hr_shared
+    description: Aggregated headcount; no individual rows.
+    query: |
+      SELECT department, COUNT(*) AS headcount
+      FROM `${project_id}.hr_private.employees`
+      GROUP BY department
+
+  tenure_distribution:
+    dataset: hr_analytics
+    query: |
+      SELECT department,
+             DATE_DIFF(CURRENT_DATE(), hired_on, YEAR) AS tenure_years,
+             COUNT(*) AS employees
+      FROM `${project_id}.hr_private.employees`
+      GROUP BY department, tenure_years
+
+routines:
+  employees_in_department:
+    dataset: hr_shared
+    description: Directory entries for one department.
+    routine_type: TABLE_VALUED_FUNCTION
+    language: SQL
+    arguments:
+      - { name: dept, data_type: STRING }
+    definition_body: |
+      SELECT employee_id, full_name, email
+      FROM `${project_id}.hr_private.employees`
+      WHERE department = dept
+    return_table_type:
+      columns:
+        - { name: employee_id, type: STRING }
+        - { name: full_name, type: STRING }
+        - { name: email, type: STRING }

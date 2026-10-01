@@ -22,16 +22,20 @@ datasets:
       - role: READER
         members:
           - specialGroup:projectReaders
-    views:
-      customer_revenue:
-        query: |
-          SELECT customer_id, SUM(amount) AS revenue
-          FROM `${project_id}.staging.orders`
-          WHERE status = 'COMPLETED'
-          GROUP BY customer_id
-      daily_revenue:
-        query: |
-          SELECT DATE(loaded_at) AS day, SUM(amount) AS revenue
-          FROM `${project_id}.staging.orders`
-          WHERE status = 'COMPLETED'
-          GROUP BY day
+
+views:
+  customer_revenue:
+    dataset: marts
+    query: |
+      SELECT customer_id, SUM(amount) AS revenue
+      FROM `${project_id}.staging.orders`
+      WHERE status = 'COMPLETED'
+      GROUP BY customer_id
+
+  daily_revenue:
+    dataset: marts
+    query: |
+      SELECT DATE(loaded_at) AS day, SUM(amount) AS revenue
+      FROM `${project_id}.staging.orders`
+      WHERE status = 'COMPLETED'
+      GROUP BY day

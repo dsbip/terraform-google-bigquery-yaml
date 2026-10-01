@@ -30,7 +30,6 @@ locals {
   existing_dataset_keys = [
     "dataset_id", "project_id", "create", "location", "access",
     "authorized_views", "authorized_datasets", "authorized_routines",
-    "tables", "views", "materialized_views", "routines",
   ]
 
   secret_names = try(nonsensitive(keys(var.secrets)), keys(var.secrets))
@@ -48,6 +47,10 @@ locals {
       { path = "defaults", value = try(local.config.defaults, null), def = "defaults" },
       { path = "defaults.labels", value = try(local.defaults.labels, null), def = null },
       { path = "datasets", value = try(local.config.datasets, null), def = null },
+      { path = "tables", value = try(local.config.tables, null), def = null },
+      { path = "views", value = try(local.config.views, null), def = null },
+      { path = "materialized_views", value = try(local.config.materialized_views, null), def = null },
+      { path = "routines", value = try(local.config.routines, null), def = null },
       { path = "connections", value = try(local.config.connections, null), def = null },
       { path = "transfers", value = try(local.config.transfers, null), def = null },
     ],
@@ -62,10 +65,6 @@ locals {
         { path = "datasets.${k}.default_encryption_configuration", value = try(v.default_encryption_configuration, null), def = "encryption_configuration" },
         { path = "datasets.${k}.external_dataset_reference", value = try(v.external_dataset_reference, null), def = "external_dataset_reference" },
         { path = "datasets.${k}.external_catalog_dataset_options", value = try(v.external_catalog_dataset_options, null), def = "external_catalog_dataset_options" },
-        { path = "datasets.${k}.tables", value = try(v.tables, null), def = null },
-        { path = "datasets.${k}.views", value = try(v.views, null), def = null },
-        { path = "datasets.${k}.materialized_views", value = try(v.materialized_views, null), def = null },
-        { path = "datasets.${k}.routines", value = try(v.routines, null), def = null },
       ]
     ]),
     [for ref in local.dataset_ref_items : { path = ref.path, value = ref.value, def = ref.def } if !can(tostring(ref.value))],
@@ -211,7 +210,8 @@ locals {
           )
         ]
       }
-      if !contains(local.schema_keys[c.def], key)
+      # v1 nesting (datasets.<key>.tables, ...) is reported by nesting_errors.
+      if !contains(local.schema_keys[c.def], key) && !(c.def == "dataset" && contains(local.child_types, key))
     ]
     if c.def != null
   ])
@@ -325,6 +325,9 @@ locals {
   config_errors = concat(
     var.config_file == null && var.config_yaml == null ? ["Set the config_file or the config_yaml variable."] : [],
     var.config_file != null && var.config_yaml != null ? ["Set only one of the config_file and config_yaml variables."] : [],
+    local.config_tab_failed ? [
+      "The YAML cannot be parsed: tabs are used for indentation on line${length(local.config_tab_lines) > 1 ? "s" : ""} ${join(", ", slice(local.config_tab_lines, 0, min(5, length(local.config_tab_lines))))}${length(local.config_tab_lines) > 5 ? " and ${length(local.config_tab_lines) - 5} more" : ""}. YAML allows only spaces; replace the tabs with spaces."
+    ] : [],
     length(local.resources_without_project) > 0 ? [
       "No project ID for ${join(", ", local.resources_without_project)}: set project_id at the top of the YAML file (or on the resource), or pass the module's project_id variable."
     ] : [],
@@ -358,6 +361,126 @@ locals {
     if length(paths) > 1
   ]
 
+  # ---------------------------------------------------------------------------
+  # Duplicate keys
+  #
+  # yamldecode() keeps only the last of two equal keys, so a second `orders:`
+  # under tables would silently replace the first, and a table deployed from
+  # the first would be destroyed. Duplicates are found in the YAML text:
+  # top-level keys, and the keys of each keyed section in block style.
+  # ---------------------------------------------------------------------------
+
+  yaml_key_pattern = "^ *(\"[^\"]*\"|'[^']*'|[^\\s#'\"-][^:#]*?)[ \\t]*:(?:[ \\t]|$)"
+  config_lines     = split("\n", replace(local.config_text, "\r", ""))
+
+  top_level_keys = [
+    for i, line in local.config_lines : { line = i + 1, key = trim(regexall(local.yaml_key_pattern, line)[0][0], "\"'") }
+    if length(regexall("^[^\\s#]", line)) > 0 && length(regexall(local.yaml_key_pattern, line)) > 0
+  ]
+
+  # Lines that start a top-level item end the section before them.
+  top_level_lines = [for i, line in local.config_lines : i if length(regexall("^[^\\s#]", line)) > 0]
+
+  keyed_sections = {
+    datasets           = "dataset_id"
+    tables             = "table_id"
+    views              = "table_id"
+    materialized_views = "table_id"
+    routines           = "routine_id"
+    connections        = "connection_id"
+    transfers          = "display_name"
+  }
+
+  # Sections that appear once, with their lines (0-based start, exclusive end).
+  section_blocks = {
+    for section in keys(local.keyed_sections) : section => {
+      start = [for k in local.top_level_keys : k.line - 1 if k.key == section][0]
+      end = try(min([
+        for i in local.top_level_lines : i
+        if i > [for k in local.top_level_keys : k.line - 1 if k.key == section][0]
+      ]...), length(local.config_lines))
+    }
+    if length([for k in local.top_level_keys : k if k.key == section]) == 1
+  }
+
+  # Entries are the code lines at the indentation of the section's first one.
+  section_entry_keys = {
+    for section, block in local.section_blocks : section => [
+      for i, line in slice(local.config_lines, block.start + 1, block.end) : {
+        line = block.start + i + 2
+        key  = trim(regexall(local.yaml_key_pattern, line)[0][0], "\"'")
+      }
+      if length(regexall("^\\s*(#|$)", line)) == 0
+      && length(regexall(local.yaml_key_pattern, line)) > 0
+      && length(regexall("^ *", line)[0]) == try([
+        for l in slice(local.config_lines, block.start + 1, block.end) : length(regexall("^ *", l)[0])
+        if length(regexall("^\\s*(#|$)", l)) == 0
+      ][0], -1)
+    ]
+  }
+
+  duplicate_key_errors = concat(
+    [
+      for key, lines in { for k in local.top_level_keys : k.key => k.line... } :
+      "(root): \"${key}\" appears on lines ${join(" and ", lines)}; YAML keeps only the last one, so merge them into one section"
+      if length(lines) > 1
+    ],
+    flatten([
+      for section, entries in local.section_entry_keys : [
+        for key, lines in { for e in entries : e.key => e.line... } :
+        "${section}.${key}: defined on lines ${join(" and ", lines)}; YAML keeps only the last one. Keys must be unique within ${section}; rename the others (${local.keyed_sections[section]} sets the BigQuery ID independently of the key)"
+        if length(lines) > 1
+      ]
+    ]),
+  )
+
+  # ---------------------------------------------------------------------------
+  # Dataset references of tables, views, materialized views and routines
+  # ---------------------------------------------------------------------------
+
+  # v1 nested these sections inside their dataset.
+  nesting_errors = flatten([
+    for k, v in local.datasets_input : [
+      for type in local.child_types :
+      "datasets.${k}.${type}: ${type} are not nested in datasets; move each entry to the top-level ${type} section and add dataset: ${k} to it (see docs/upgrading.md)"
+      if contains(try(keys(v), []), type)
+    ]
+  ])
+
+  # "." separates the dataset key from the key in "<dataset>.<key>" references
+  # and instance keys, so neither may contain one.
+  key_errors = [
+    for item in concat(
+      [for k in try(keys(local.config.datasets), []) : { section = "datasets", key = k }],
+      flatten([for type in local.child_types : [for k in try(keys(local.config[type]), []) : { section = type, key = k }]]),
+    ) : "${item.section}.${item.key}: keys cannot contain \".\" (it separates the dataset key from the key in references)"
+    if length(split(".", item.key)) > 1
+  ]
+
+  child_values = flatten([for type in local.child_types : values(local.children[type])])
+
+  # Dataset keys that look like a mistyped reference: same letters in another
+  # order, or the same first three characters.
+  dataset_ref_suggestions = {
+    for c in local.child_values : c.path => [
+      for d in keys(local.datasets_input) : d
+      if join("", sort(split("", d))) == join("", sort(split("", c.ds_key))) || (length(c.ds_key) >= 3 && length(d) >= 3 && substr(d, 0, 3) == substr(c.ds_key, 0, 3))
+    ]
+  }
+
+  # Entries that are neither null nor a mapping are reported by mapping_errors only.
+  dataset_ref_errors = [
+    for c in local.child_values : (
+      try(c.value.dataset, null) == null ? "${c.path}.dataset: is required (the key of a dataset under datasets)" :
+      !can(tostring(c.value.dataset)) ? "${c.path}.dataset: must be the key of a dataset under datasets" :
+      contains(keys(local.datasets_input), c.ds_key) ? "" :
+      "${c.path}.dataset: \"${c.ds_key}\" is not a key under datasets${
+        length(local.dataset_ref_suggestions[c.path]) == 0 ? "" : " (did you mean ${join(" or ", local.dataset_ref_suggestions[c.path])}?)"
+      }; declare a dataset managed elsewhere with create: false"
+    )
+    if c.value == null || can(keys(c.value))
+  ]
+
   # Authorized views / datasets / routines: every reference must resolve.
   dataset_ref_items = flatten([
     for k, v in local.datasets_input : concat(
@@ -367,17 +490,24 @@ locals {
     )
   ])
 
+  view_keys              = [for c in values(local.children.views) : c.key]
+  materialized_view_keys = [for c in values(local.children.materialized_views) : c.key]
+
   authorization_errors = concat(
     [
-      for e in local.authorized_view_list : "datasets.${e.ds_key}.authorized_views[${e.index}]: cannot resolve ${try(jsonencode(e.ref), "the reference")}; use \"dataset.view\", \"project.dataset.view\" or {project_id, dataset_id, table_id}"
+      for e in local.authorized_view_list : "datasets.${e.ds_key}.authorized_views[${e.index}]: cannot resolve ${try(jsonencode(e.ref), "the reference")}; use a view key, \"dataset.view\", \"project.dataset.view\" or {project_id, dataset_id, table_id}"
       if e.target.dataset_id == "" || e.target.table_id == ""
+    ],
+    [
+      for e in local.authorized_view_list : "datasets.${e.ds_key}.authorized_views[${e.index}]: \"${e.ref}\" is the key of both a view and a materialized view; write \"<dataset key>.${e.ref}\""
+      if try(contains(local.view_keys, e.ref) && contains(local.materialized_view_keys, e.ref), false)
     ],
     [
       for e in local.authorized_dataset_list : "datasets.${e.ds_key}.authorized_datasets[${e.index}]: cannot resolve ${try(jsonencode(e.ref), "the reference")}; use \"dataset\", \"project.dataset\" or {project_id, dataset_id}"
       if e.target.dataset_id == ""
     ],
     [
-      for e in local.authorized_routine_list : "datasets.${e.ds_key}.authorized_routines[${e.index}]: cannot resolve ${try(jsonencode(e.ref), "the reference")}; use \"dataset.routine\", \"project.dataset.routine\" or {project_id, dataset_id, routine_id}"
+      for e in local.authorized_routine_list : "datasets.${e.ds_key}.authorized_routines[${e.index}]: cannot resolve ${try(jsonencode(e.ref), "the reference")}; use a routine key, \"dataset.routine\", \"project.dataset.routine\" or {project_id, dataset_id, routine_id}"
       if e.target.dataset_id == "" || e.target.routine_id == ""
     ],
   )
@@ -398,7 +528,7 @@ locals {
       [for b in t.biglake_configuration : "${t.path}.biglake_configuration: connection_id and storage_uri are required" if b.connection_id == null || b.storage_uri == null],
       flatten([
         for c in t.table_constraints : concat(
-          [for i, fk in c.foreign_keys : "${t.path}.table_constraints.foreign_keys[${i}].referenced_table: cannot resolve; use \"dataset.table\", \"project.dataset.table\" or {project_id, dataset_id, table_id}" if fk.referenced_table.dataset_id == "" || fk.referenced_table.table_id == ""],
+          [for i, fk in c.foreign_keys : "${t.path}.table_constraints.foreign_keys[${i}].referenced_table: cannot resolve; use a table key, \"dataset.table\", \"project.dataset.table\" or {project_id, dataset_id, table_id}" if fk.referenced_table.dataset_id == "" || fk.referenced_table.table_id == ""],
           [for i, fk in c.foreign_keys : "${t.path}.table_constraints.foreign_keys[${i}].column_references: referencing_column and referenced_column are required" if fk.referencing_column == null || fk.referenced_column == null],
         )
       ]),
@@ -422,20 +552,26 @@ locals {
   ])
 
   duplicate_table_errors = concat(
-    # Logical keys must be unique across tables, views and materialized views of a dataset.
+    # "<dataset key>.<key>" must be unique across tables, views and materialized
+    # views: it is their output key and how references name them.
     [
       for key, paths in { for c in local.table_like_children : "${c.ds_key}.${c.key}" => c.path... } :
       "${join(" and ", paths)}: tables, views and materialized views in one dataset need distinct keys"
       if length(paths) > 1
     ],
     # Different keys can still resolve to one table through table_id overrides.
+    # Entries without a valid dataset are reported by dataset_ref_errors.
     [
       for id, items in {
-        for t in concat(values(local.tables), values(local.views), values(local.materialized_views)) :
-        "${coalesce(t.project, "<no project>")}.${t.dataset_id}.${t.table_id}" => { path = t.path, key = "${t.ds_key}.${element(split(".", t.path), length(split(".", t.path)) - 1)}" }...
+        for t in concat(
+          [for k, t in local.tables : { id = k, path = t.path, project = t.project, dataset_id = t.dataset_id, table_id = t.table_id }],
+          [for k, t in local.views : { id = k, path = t.path, project = t.project, dataset_id = t.dataset_id, table_id = t.table_id }],
+          [for k, t in local.materialized_views : { id = k, path = t.path, project = t.project, dataset_id = t.dataset_id, table_id = t.table_id }],
+        ) :
+        "${coalesce(t.project, "<no project>")}.${t.dataset_id}.${t.table_id}" => t... if t.dataset_id != ""
       } :
       "${join(" and ", [for i in items : i.path])}: resolve to the same table ${id}"
-      if length(distinct([for i in items : i.key])) > 1
+      if length(distinct([for i in items : i.id])) > 1
     ],
   )
 
@@ -632,6 +768,10 @@ locals {
     local.access_member_errors,
     local.dataset_errors,
     local.duplicate_dataset_errors,
+    local.duplicate_key_errors,
+    local.nesting_errors,
+    local.key_errors,
+    local.dataset_ref_errors,
     local.authorization_errors,
     local.table_errors,
     local.query_errors,

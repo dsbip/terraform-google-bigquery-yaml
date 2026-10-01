@@ -10,20 +10,22 @@ datasets:
     access:
       - role: READER
         members: [group:analysts@example.com]
-    tables: { ... }
-    views: { ... }
-    materialized_views: { ... }
-    routines: { ... }
+
+tables:
+  orders:
+    dataset: sales     # tables, views and routines name their dataset by key
 ```
 
 A bare key creates a dataset with defaults only: `sales: {}` or just `sales:`.
+
+Tables, views, materialized views and routines are defined in their own top-level sections ([tables](tables.md), [views](views.md), [routines](routines.md)), not inside the dataset. Each one names its dataset with `dataset: <key>` and takes the dataset's project, ID and location ([configuration.md](configuration.md#the-dataset-of-a-table-view-or-routine)).
 
 ## Keys
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `dataset_id` | string | map key | Dataset ID. |
-| `project_id` | string | [resolved](configuration.md#projects) | Project of the dataset and of everything nested in it. |
+| `project_id` | string | [resolved](configuration.md#projects) | Project of the dataset, and of the tables, views and routines that reference it. |
 | `create` | bool | `true` | `false` for a dataset that exists already; see [Existing datasets](#existing-datasets). |
 | `location` | string | [resolved](configuration.md#locations) | `US`, `EU` or a region. Changing it replaces the dataset. |
 | `friendly_name` | string | | Display name. |
@@ -43,9 +45,8 @@ A bare key creates a dataset with defaults only: `sales: {}` or just `sales:`.
 | `external_catalog_dataset_options` | `{default_storage_location_uri, parameters}` | | Open-source catalog (Hive/Iceberg) options. |
 | `access` | list | | [Access grants](#access-grants). |
 | `authorized_views`, `authorized_datasets`, `authorized_routines` | list | | See [authorized-views.md](authorized-views.md). |
-| `tables` | map | | See [tables.md](tables.md). |
-| `views`, `materialized_views` | map | | See [views.md](views.md). |
-| `routines` | map | | See [routines.md](routines.md). |
+
+Keys cannot contain `.`. A v1 configuration with `tables`, `views`, `materialized_views` or `routines` inside a dataset fails validation with a pointer to [upgrading.md](upgrading.md).
 
 ## Access grants
 
@@ -95,7 +96,7 @@ Do not manage the same dataset with `google_bigquery_dataset_iam_policy`, `_iam_
 
 ## Existing datasets
 
-`create: false` declares a dataset that exists already, for example one created by another team or an older setup. The module does not create or change the dataset, but manages everything nested under it:
+`create: false` declares a dataset that exists already, for example one created by another team or an older setup. The module does not create or change the dataset, but manages its grants and authorizations, and tables, views and routines can reference it with `dataset:`:
 
 ```yaml
 datasets:
@@ -108,11 +109,14 @@ datasets:
       - role: READER
         members: [group:marketing@example.com]
     authorized_views: [marketing.campaign_performance]
-    tables:
-      campaign_spend: { ... }
+
+tables:
+  campaign_spend:
+    dataset: warehouse             # created in legacy-project.legacy_warehouse
+    schema_file: schemas/campaign_spend.json
 ```
 
-Only `dataset_id`, `project_id`, `create`, `location`, `access`, `authorized_*`, `tables`, `views`, `materialized_views` and `routines` are allowed on such a dataset; other settings would have no effect, and validation rejects them. `defaults.datasets.access` applies to existing datasets too.
+Only `dataset_id`, `project_id`, `create`, `location`, `access` and `authorized_*` are allowed on such a dataset; other settings would have no effect, and validation rejects them. `defaults.datasets.access` applies to existing datasets too.
 
 The [existing-datasets example](../examples/existing-datasets) shows this, including an authorization on a dataset in another project.
 

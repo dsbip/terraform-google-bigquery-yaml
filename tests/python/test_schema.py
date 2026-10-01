@@ -46,8 +46,14 @@ INVALID = [
     ("unknown dataset key", {"datasets": {"a": {"descripton": "x"}}}),
     ("datasets as a list", {"datasets": [{"dataset_id": "a"}]}),
     ("bad enum", {"datasets": {"a": {"storage_billing_model": "CHEAP"}}}),
-    ("bad routine type", {"datasets": {"a": {"routines": {"f": {"routine_type": "MACRO"}}}}}),
-    ("clustering too long", {"datasets": {"a": {"tables": {"t": {"clustering": ["a", "b", "c", "d", "e"]}}}}}),
+    ("bad routine type", {"datasets": {"a": {}}, "routines": {"f": {"dataset": "a", "routine_type": "MACRO"}}}),
+    ("clustering too long", {"datasets": {"a": {}}, "tables": {"t": {"dataset": "a", "clustering": ["a", "b", "c", "d", "e"]}}}),
+    ("table without dataset", {"datasets": {"a": {}}, "tables": {"t": {"description": "x"}}}),
+    ("view without dataset", {"views": {"v": {"query": "SELECT 1"}}}),
+    ("empty routine entry", {"routines": {"f": None}}),
+    ("dataset that is not a string", {"tables": {"t": {"dataset": ["a"]}}}),
+    ("v1 nesting of tables in a dataset", {"datasets": {"a": {"tables": {"t": {}}}}}),
+    ("dataset as a default", {"defaults": {"tables": {"dataset": "a"}}}),
     ("access without members", {"datasets": {"a": {"access": [{"role": "READER"}]}}}),
     ("identity key as default", {"defaults": {"tables": {"table_id": "x"}}}),
     ("placeholder-free string for a boolean", {"datasets": {"a": {"delete_contents_on_destroy": "yes please"}}}),
@@ -73,5 +79,20 @@ def test_placeholders_are_accepted_in_typed_fields(schema):
 
 def test_complete_example_uses_every_top_level_section(schema):
     doc = load_yaml(next(p for p in example_configs() if p.parent.name == "complete"))
-    assert {"defaults", "datasets", "connections", "transfers"} <= set(doc)
+    assert set(schema["properties"]) - {"project_id"} <= set(doc)
     copy.deepcopy(doc)  # sanity: plain data
+
+
+def test_child_sections_require_a_dataset(schema):
+    """tables, views, materialized_views and routines entries must name their
+    dataset; the definitions themselves must not require it, because
+    defaults.<type> reuses them and forbids dataset."""
+    for section, definition in {
+        "tables": "table", "views": "view", "materialized_views": "materialized_view", "routines": "routine",
+    }.items():
+        entry = schema["properties"][section]["additionalProperties"]["allOf"]
+        assert entry[0] == {"$ref": f"#/definitions/{definition}"}
+        assert entry[1]["required"] == ["dataset"]
+        assert "required" not in schema["definitions"][definition]
+        assert list(schema["definitions"][definition]["properties"])[0] == "dataset"
+        assert section not in schema["definitions"]["dataset"]["properties"]

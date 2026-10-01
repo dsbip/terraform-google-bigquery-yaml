@@ -13,6 +13,10 @@
 #   partner_share  one authorized view for a partner, shared with table IAM
 #   transfers      a Cloud Storage load and two scheduled queries
 #
+# The datasets section declares the datasets only. Tables, views,
+# materialized views and routines follow in their own sections, and each
+# names its dataset with `dataset: <key>`.
+#
 # Placeholders such as $${analysts_group} come from template_vars in main.tf.
 # (Comments are rendered too, hence the $$ escape in this line.)
 
@@ -54,118 +58,19 @@ datasets:
   raw:
     description: Data as it arrives from the shop and the data lake.
     labels: { layer: raw }
-    tables:
-      orders:
-        description: Order events loaded from Cloud Storage every hour.
-        schema_file: schemas/raw_orders.json
-        time_partitioning: { type: DAY } # ingestion time
-      customers:
-        schema:
-          - { name: customer_id, type: STRING, mode: REQUIRED }
-          - { name: email, type: STRING }
-          - { name: country_code, type: STRING }
-          - { name: updated_at, type: TIMESTAMP }
-      clickstream:
-        description: Web events in the data lake, read through BigLake.
-        schema:
-          - { name: session_id, type: STRING }
-          - { name: customer_id, type: STRING }
-          - { name: page, type: STRING }
-          - { name: event_time, type: TIMESTAMP }
-        external_data_configuration:
-          source_format: PARQUET
-          source_uris: ["gs://${lake_bucket}/clickstream/*.parquet"]
-          connection_id: lake
-          metadata_cache_mode: AUTOMATIC
-        max_staleness: "0-0 0 1:0:0"
 
   core:
     description: Curated, conformed model.
     labels: { layer: core }
     authorized_datasets: [reporting]
     authorized_views: [partner_share.partner_daily_sales]
-    authorized_routines: [udfs.customer_orders]
-    tables:
-      dim_customer:
-        schema:
-          - { name: customer_id, type: STRING, mode: REQUIRED }
-          - { name: email, type: STRING, description: Normalised email }
-          - { name: country_code, type: STRING }
-          - { name: first_order_date, type: DATE }
-        table_constraints:
-          primary_key: { columns: [customer_id] }
-      fct_orders:
-        schema_file: schemas/fct_orders.yaml
-        time_partitioning:
-          field: order_date
-        clustering: [customer_id, status]
-        table_constraints:
-          primary_key: { columns: [order_id] }
-          foreign_keys:
-            - name: fk_orders_customer
-              referenced_table: core.dim_customer
-              column_references:
-                referencing_column: customer_id
-                referenced_column: customer_id
-    materialized_views:
-      mv_daily_sales:
-        description: Revenue per day and country, refreshed incrementally.
-        query: |
-          SELECT order_date, country_code, COUNT(*) AS orders, SUM(amount) AS revenue
-          FROM `${project_id}.core.fct_orders`
-          WHERE status = 'COMPLETED'
-          GROUP BY order_date, country_code
-        time_partitioning:
-          field: order_date
-        clustering: [country_code]
+    authorized_routines: [customer_orders] # routine key
 
   udfs:
     description: Shared routines.
     access:
       - role: READER
         members: [specialGroup:projectReaders]
-    routines:
-      normalize_email:
-        arguments:
-          - { name: email, data_type: STRING }
-        return_type: STRING
-        definition_body: LOWER(TRIM(email))
-      mask_email:
-        data_governance_type: DATA_MASKING
-        language: SQL
-        arguments:
-          - { name: email, data_type: STRING }
-        return_type: STRING
-        definition_body: REGEXP_REPLACE(email, r'^[^@]+', 'xxxxx')
-      customer_orders:
-        description: Orders of one customer in a date range.
-        routine_type: TABLE_VALUED_FUNCTION
-        arguments:
-          - { name: customer, data_type: STRING }
-          - { name: from_date, data_type: DATE }
-          - { name: to_date, data_type: DATE }
-        definition_body: |
-          SELECT order_id, order_date, amount, status
-          FROM `${project_id}.core.fct_orders`
-          WHERE customer_id = customer AND order_date BETWEEN from_date AND to_date
-        return_table_type:
-          columns:
-            - { name: order_id, type: STRING }
-            - { name: order_date, type: DATE }
-            - { name: amount, type: NUMERIC }
-            - { name: status, type: STRING }
-      rebuild_dim_customer:
-        description: Rebuilds core.dim_customer from raw data.
-        routine_type: PROCEDURE
-        definition_file: sql/rebuild_dim_customer.sql.tftpl
-      review_sentiment:
-        description: Scores review text with a Cloud Run service.
-        arguments:
-          - { name: review, data_type: STRING }
-        return_type: FLOAT64
-        remote_function_options:
-          endpoint: ${sentiment_service_url}
-          connection: remote
 
   reporting:
     description: Analyst-facing views.
@@ -174,31 +79,156 @@ datasets:
       - role: READER
         members:
           - group:${analysts_group}
-    views:
-      customer_360:
-        description: Customers with their order history.
-        query_file: sql/customer_360.sql.tftpl
-      sales_by_country:
-        query: |
-          SELECT country_code, SUM(revenue) AS revenue
-          FROM `${project_id}.core.mv_daily_sales`
-          WHERE order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
-          GROUP BY country_code
 
   partner_share:
     description: Data shared with the logistics partner.
-    views:
-      partner_daily_sales:
-        description: Orders per day and country; no customer data.
-        query: |
-          SELECT order_date, country_code, COUNT(*) AS orders
-          FROM `${project_id}.core.fct_orders`
-          WHERE order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
-          GROUP BY order_date, country_code
-        iam:
-          - role: roles/bigquery.dataViewer
-            members:
-              - serviceAccount:${partner_service_account}
+
+tables:
+  orders:
+    dataset: raw
+    description: Order events loaded from Cloud Storage every hour.
+    schema_file: schemas/raw_orders.json
+    time_partitioning: { type: DAY } # ingestion time
+
+  customers:
+    dataset: raw
+    schema:
+      - { name: customer_id, type: STRING, mode: REQUIRED }
+      - { name: email, type: STRING }
+      - { name: country_code, type: STRING }
+      - { name: updated_at, type: TIMESTAMP }
+
+  clickstream:
+    dataset: raw
+    description: Web events in the data lake, read through BigLake.
+    schema:
+      - { name: session_id, type: STRING }
+      - { name: customer_id, type: STRING }
+      - { name: page, type: STRING }
+      - { name: event_time, type: TIMESTAMP }
+    external_data_configuration:
+      source_format: PARQUET
+      source_uris: ["gs://${lake_bucket}/clickstream/*.parquet"]
+      connection_id: lake
+      metadata_cache_mode: AUTOMATIC
+    max_staleness: "0-0 0 1:0:0"
+
+  dim_customer:
+    dataset: core
+    schema:
+      - { name: customer_id, type: STRING, mode: REQUIRED }
+      - { name: email, type: STRING, description: Normalised email }
+      - { name: country_code, type: STRING }
+      - { name: first_order_date, type: DATE }
+    table_constraints:
+      primary_key: { columns: [customer_id] }
+
+  fct_orders:
+    dataset: core
+    schema_file: schemas/fct_orders.yaml
+    time_partitioning:
+      field: order_date
+    clustering: [customer_id, status]
+    table_constraints:
+      primary_key: { columns: [order_id] }
+      foreign_keys:
+        - name: fk_orders_customer
+          referenced_table: dim_customer
+          column_references:
+            referencing_column: customer_id
+            referenced_column: customer_id
+
+views:
+  customer_360:
+    dataset: reporting
+    description: Customers with their order history.
+    query_file: sql/customer_360.sql.tftpl
+
+  sales_by_country:
+    dataset: reporting
+    query: |
+      SELECT country_code, SUM(revenue) AS revenue
+      FROM `${project_id}.core.mv_daily_sales`
+      WHERE order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
+      GROUP BY country_code
+
+  partner_daily_sales:
+    dataset: partner_share
+    description: Orders per day and country; no customer data.
+    query: |
+      SELECT order_date, country_code, COUNT(*) AS orders
+      FROM `${project_id}.core.fct_orders`
+      WHERE order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+      GROUP BY order_date, country_code
+    iam:
+      - role: roles/bigquery.dataViewer
+        members:
+          - serviceAccount:${partner_service_account}
+
+materialized_views:
+  mv_daily_sales:
+    dataset: core
+    description: Revenue per day and country, refreshed incrementally.
+    query: |
+      SELECT order_date, country_code, COUNT(*) AS orders, SUM(amount) AS revenue
+      FROM `${project_id}.core.fct_orders`
+      WHERE status = 'COMPLETED'
+      GROUP BY order_date, country_code
+    time_partitioning:
+      field: order_date
+    clustering: [country_code]
+
+routines:
+  normalize_email:
+    dataset: udfs
+    arguments:
+      - { name: email, data_type: STRING }
+    return_type: STRING
+    definition_body: LOWER(TRIM(email))
+
+  mask_email:
+    dataset: udfs
+    data_governance_type: DATA_MASKING
+    language: SQL
+    arguments:
+      - { name: email, data_type: STRING }
+    return_type: STRING
+    definition_body: REGEXP_REPLACE(email, r'^[^@]+', 'xxxxx')
+
+  customer_orders:
+    dataset: udfs
+    description: Orders of one customer in a date range.
+    routine_type: TABLE_VALUED_FUNCTION
+    arguments:
+      - { name: customer, data_type: STRING }
+      - { name: from_date, data_type: DATE }
+      - { name: to_date, data_type: DATE }
+    definition_body: |
+      SELECT order_id, order_date, amount, status
+      FROM `${project_id}.core.fct_orders`
+      WHERE customer_id = customer AND order_date BETWEEN from_date AND to_date
+    return_table_type:
+      columns:
+        - { name: order_id, type: STRING }
+        - { name: order_date, type: DATE }
+        - { name: amount, type: NUMERIC }
+        - { name: status, type: STRING }
+
+  rebuild_dim_customer:
+    dataset: udfs
+    description: Rebuilds core.dim_customer from raw data.
+    routine_type: PROCEDURE
+    definition_file: sql/rebuild_dim_customer.sql.tftpl
+
+  review_sentiment:
+    dataset: udfs
+    description: Scores review text with a Cloud Run service.
+    arguments:
+      - { name: review, data_type: STRING }
+    return_type: FLOAT64
+    remote_function_options:
+      endpoint: ${sentiment_service_url}
+      connection: remote
 
 transfers:
   load_raw_orders:
