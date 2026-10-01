@@ -1,6 +1,6 @@
 # Examples
 
-Each directory is a runnable Terraform root module: a `main.tf` that calls the module and a commented `config.yaml` (plus SQL, JavaScript or schema files where needed).
+Each directory is a runnable Terraform root module: a `main.tf` that calls the module and a commented `config.yaml` (plus SQL, JavaScript or schema files where needed). In every `config.yaml`, datasets, tables, views, materialized views and routines are separate top-level sections, and each table, view or routine names its dataset with `dataset:`.
 
 | Example | Scenario | Resources |
 |---|---|---|
@@ -30,7 +30,7 @@ terraform destroy -var project_id=my-project
 Examples reference the module as `source = "../.."`. In your own code, use the GitHub source with a version tag:
 
 ```hcl
-source = "github.com/dsbip/terraform-google-bigquery-yaml?ref=v1.0.0"
+source = "github.com/dsbip/terraform-google-bigquery-yaml?ref=v2.0.0"
 ```
 
 Examples meant to be destroyed set `deletion_protection: false` for tables and `delete_contents_on_destroy: true` for datasets. Production configurations should keep the protective defaults.

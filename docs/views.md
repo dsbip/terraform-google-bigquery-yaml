@@ -1,30 +1,38 @@
 # Views and materialized views
 
+Views and materialized views are declared in the top-level `views` and `materialized_views` sections. Each names its dataset with `dataset:`, a key under `datasets`:
+
 ```yaml
 datasets:
-  reporting:
-    views:
-      revenue_by_country:
-        description: Revenue per country.
-        query: |
-          SELECT country, SUM(amount) AS revenue
-          FROM `${project_id}.sales.orders`
-          GROUP BY country
-      customers:
-        query_file: sql/customers.sql.tftpl
-    materialized_views:
-      daily_revenue:
-        query: |
-          SELECT DATE(ordered_at) AS day, SUM(amount) AS revenue
-          FROM `${project_id}.sales.orders`
-          GROUP BY day
-        refresh_interval_ms: 1800000
+  reporting: {}
+
+views:
+  revenue_by_country:
+    dataset: reporting
+    description: Revenue per country.
+    query: |
+      SELECT country, SUM(amount) AS revenue
+      FROM `${project_id}.sales.orders`
+      GROUP BY country
+  customers:
+    dataset: reporting
+    query_file: sql/customers.sql.tftpl
+
+materialized_views:
+  daily_revenue:
+    dataset: reporting
+    query: |
+      SELECT DATE(ordered_at) AS day, SUM(amount) AS revenue
+      FROM `${project_id}.sales.orders`
+      GROUP BY day
+    refresh_interval_ms: 1800000
 ```
 
 ## View keys
 
 | Key | Type | Default | Description |
 |---|---|---|---|
+| `dataset` | string | required | Key of the view's dataset under `datasets`. |
 | `table_id` | string | map key | View ID. |
 | `query` | string | | GoogleSQL query. Exactly one of `query` / `query_file`. |
 | `query_file` | path | | SQL file; `*.tftpl` files are template-rendered ([templating.md](templating.md)). |
@@ -43,6 +51,7 @@ Changing a view's query is an in-place update.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
+| `dataset` | string | required | Key of the materialized view's dataset under `datasets`. |
 | `table_id` | string | map key | Materialized view ID. |
 | `query` / `query_file` | string / path | | Exactly one is required. |
 | `enable_refresh` | bool | `true` (BigQuery) | Refresh automatically when base tables change. |
@@ -78,20 +87,20 @@ Put each layer in its own YAML file and module call, chained with `depends_on`:
 
 ```hcl
 module "base" {
-  source      = "github.com/dsbip/terraform-google-bigquery-yaml?ref=v1.0.0"
+  source      = "github.com/dsbip/terraform-google-bigquery-yaml?ref=v2.0.0"
   project_id  = var.project_id
   config_file = "${path.module}/base.yaml"      # tables and first-level views
 }
 
 module "marts" {
-  source      = "github.com/dsbip/terraform-google-bigquery-yaml?ref=v1.0.0"
+  source      = "github.com/dsbip/terraform-google-bigquery-yaml?ref=v2.0.0"
   project_id  = var.project_id
   config_file = "${path.module}/marts.yaml"     # views over base views
   depends_on  = [module.base]
 }
 ```
 
-The second file can still reference datasets from the first with `create: false`, for example to authorize its views on them. See the [layered-views example](../examples/layered-views).
+The second file declares datasets from the first with `create: false` when its views or authorizations need them. See the [layered-views example](../examples/layered-views).
 
 ## SQL tips
 

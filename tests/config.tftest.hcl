@@ -83,11 +83,17 @@ run "yamlencode_output_works_as_config_yaml" {
       datasets = {
         generated = { description = "Built in HCL" }
       }
+      tables = {
+        events = { dataset = "generated" }
+      }
     })
   }
 
   assert {
-    condition     = google_bigquery_dataset.this["generated"].description == "Built in HCL"
+    condition = (
+      google_bigquery_dataset.this["generated"].description == "Built in HCL" &&
+      google_bigquery_table.table["generated.events"].dataset_id == "generated"
+    )
     error_message = "yamlencode() output should be accepted."
   }
 }
@@ -113,9 +119,10 @@ run "empty_sections_are_ignored" {
       defaults:
       datasets:
         sales:
-          tables:
-          views:
-          routines:
+      tables:
+      views:
+      materialized_views:
+      routines:
       connections:
       transfers:
     EOT
@@ -175,9 +182,11 @@ run "base_path_resolves_files_for_config_yaml" {
     config_yaml = <<-EOT
       datasets:
         sales:
-          tables:
-            orders:
-              schema_file: schemas/orders.json
+
+      tables:
+        orders:
+          dataset: sales
+          schema_file: schemas/orders.json
     EOT
   }
 
@@ -200,11 +209,14 @@ run "common_labels_variable_is_applied_everywhere" {
         sales:
           labels:
             team: sales
-          tables:
-            t: {}
-          views:
-            v:
-              query: SELECT 1
+
+      tables:
+        t: { dataset: sales }
+
+      views:
+        v:
+          dataset: sales
+          query: SELECT 1
     EOT
   }
 

@@ -30,112 +30,128 @@ datasets:
       - role: READER
         members: [specialGroup:projectReaders]
 
-    tables:
-      orders:
-        schema:
-          - { name: order_id, type: STRING, mode: REQUIRED }
-          - { name: customer_email, type: STRING }
-          - { name: amount, type: NUMERIC }
-          - { name: status, type: STRING }
-          - { name: ordered_at, type: TIMESTAMP }
-      order_audit:
-        schema:
-          - { name: run_at, type: TIMESTAMP }
-          - { name: archived_orders, type: INT64 }
+tables:
+  orders:
+    dataset: udfs
+    schema:
+      - { name: order_id, type: STRING, mode: REQUIRED }
+      - { name: customer_email, type: STRING }
+      - { name: amount, type: NUMERIC }
+      - { name: status, type: STRING }
+      - { name: ordered_at, type: TIMESTAMP }
 
-    routines:
-      # Scalar SQL UDF. routine_type defaults to SCALAR_FUNCTION.
-      normalize_email:
-        description: Lower-cases and trims an email address.
-        language: SQL
-        arguments:
-          - { name: email, data_type: STRING }
-        return_type: STRING
-        definition_body: LOWER(TRIM(email))
+  order_audit:
+    dataset: udfs
+    schema:
+      - { name: run_at, type: TIMESTAMP }
+      - { name: archived_orders, type: INT64 }
 
-      # Complex types as mappings.
-      split_tags:
-        description: Splits a comma-separated list into a de-duplicated array.
-        language: SQL
-        arguments:
-          - { name: csv, data_type: STRING }
-        return_type:
-          typeKind: ARRAY
-          arrayElementType: { typeKind: STRING }
-        definition_body: ARRAY(SELECT DISTINCT TRIM(t) FROM UNNEST(SPLIT(csv, ',')) AS t WHERE TRIM(t) != '')
+routines:
+  # Scalar SQL UDF. routine_type defaults to SCALAR_FUNCTION.
+  normalize_email:
+    dataset: udfs
+    description: Lower-cases and trims an email address.
+    language: SQL
+    arguments:
+      - { name: email, data_type: STRING }
+    return_type: STRING
+    definition_body: LOWER(TRIM(email))
 
-      order_summary:
-        description: Builds a STRUCT from order fields.
-        language: SQL
-        arguments:
-          - { name: order_id, data_type: STRING }
-          - { name: amount, data_type: NUMERIC }
-        return_type:
-          typeKind: STRUCT
-          structType:
-            fields:
-              - { name: id, type: { typeKind: STRING } }
-              - { name: amount_usd, type: { typeKind: NUMERIC } }
-        definition_body: STRUCT(order_id AS id, amount AS amount_usd)
+  # Complex types as mappings.
 
-      # JavaScript UDF. The body comes from a file; JavaScript template
-      # literals are safe because only *.tftpl files are rendered.
-      title_case:
-        description: Title-cases a string.
-        language: JAVASCRIPT
-        determinism_level: DETERMINISTIC
-        arguments:
-          - { name: s, data_type: STRING }
-        return_type: STRING
-        definition_file: js/title_case.js
+  split_tags:
+    dataset: udfs
+    description: Splits a comma-separated list into a de-duplicated array.
+    language: SQL
+    arguments:
+      - { name: csv, data_type: STRING }
+    return_type:
+      typeKind: ARRAY
+      arrayElementType: { typeKind: STRING }
+    definition_body: ARRAY(SELECT DISTINCT TRIM(t) FROM UNNEST(SPLIT(csv, ',')) AS t WHERE TRIM(t) != '')
 
-      # Table-valued function.
-      orders_above:
-        description: Orders with an amount above a threshold.
-        routine_type: TABLE_VALUED_FUNCTION
-        arguments:
-          - { name: min_amount, data_type: NUMERIC }
-        definition_body: |
-          SELECT order_id, amount
-          FROM `${project_id}.udfs.orders`
-          WHERE amount > min_amount
-        return_table_type:
-          columns:
-            - { name: order_id, type: STRING }
-            - { name: amount, type: NUMERIC }
+  order_summary:
+    dataset: udfs
+    description: Builds a STRUCT from order fields.
+    language: SQL
+    arguments:
+      - { name: order_id, data_type: STRING }
+      - { name: amount, data_type: NUMERIC }
+    return_type:
+      typeKind: STRUCT
+      structType:
+        fields:
+          - { name: id, type: { typeKind: STRING } }
+          - { name: amount_usd, type: { typeKind: NUMERIC } }
+    definition_body: STRUCT(order_id AS id, amount AS amount_usd)
 
-      # Stored procedure with IN and OUT arguments, body from a SQL file.
-      archive_cancelled_orders:
-        description: Deletes cancelled orders and records how many were removed.
-        routine_type: PROCEDURE
-        language: SQL
-        arguments:
-          - { name: older_than_days, data_type: INT64, mode: IN }
-          - { name: archived, data_type: INT64, mode: OUT }
-        definition_file: sql/archive_cancelled_orders.sql.tftpl
-        iam:
-          - role: roles/bigquery.dataViewer
-            members: [group:data-engineers@example.com]
+  # JavaScript UDF. The body comes from a file; JavaScript template
+  # literals are safe because only *.tftpl files are rendered.
+  title_case:
+    dataset: udfs
+    description: Title-cases a string.
+    language: JAVASCRIPT
+    determinism_level: DETERMINISTIC
+    arguments:
+      - { name: s, data_type: STRING }
+    return_type: STRING
+    definition_file: js/title_case.js
 
-      # Data masking function, usable in column-level masking rules.
-      mask_email:
-        description: Keeps the domain of an email address.
-        language: SQL
-        data_governance_type: DATA_MASKING
-        arguments:
-          - { name: email, data_type: STRING }
-        return_type: STRING
-        definition_body: REGEXP_REPLACE(email, r'^[^@]+', 'xxxxx')
+  # Table-valued function.
 
-      # Remote function calling a Cloud Run service through the connection above.
-      detect_language:
-        description: Detects the language of a text with a Cloud Run service.
-        arguments:
-          - { name: text, data_type: STRING }
-        return_type: STRING
-        remote_function_options:
-          endpoint: ${language_service_url}
-          connection: remote # connection key from this file
-          max_batching_rows: 50
-          user_defined_context:
-            model: fast
+  orders_above:
+    dataset: udfs
+    description: Orders with an amount above a threshold.
+    routine_type: TABLE_VALUED_FUNCTION
+    arguments:
+      - { name: min_amount, data_type: NUMERIC }
+    definition_body: |
+      SELECT order_id, amount
+      FROM `${project_id}.udfs.orders`
+      WHERE amount > min_amount
+    return_table_type:
+      columns:
+        - { name: order_id, type: STRING }
+        - { name: amount, type: NUMERIC }
+
+  # Stored procedure with IN and OUT arguments, body from a SQL file.
+
+  archive_cancelled_orders:
+    dataset: udfs
+    description: Deletes cancelled orders and records how many were removed.
+    routine_type: PROCEDURE
+    language: SQL
+    arguments:
+      - { name: older_than_days, data_type: INT64, mode: IN }
+      - { name: archived, data_type: INT64, mode: OUT }
+    definition_file: sql/archive_cancelled_orders.sql.tftpl
+    iam:
+      - role: roles/bigquery.dataViewer
+        members: [group:data-engineers@example.com]
+
+  # Data masking function, usable in column-level masking rules.
+
+  mask_email:
+    dataset: udfs
+    description: Keeps the domain of an email address.
+    language: SQL
+    data_governance_type: DATA_MASKING
+    arguments:
+      - { name: email, data_type: STRING }
+    return_type: STRING
+    definition_body: REGEXP_REPLACE(email, r'^[^@]+', 'xxxxx')
+
+  # Remote function calling a Cloud Run service through the connection above.
+
+  detect_language:
+    dataset: udfs
+    description: Detects the language of a text with a Cloud Run service.
+    arguments:
+      - { name: text, data_type: STRING }
+    return_type: STRING
+    remote_function_options:
+      endpoint: ${language_service_url}
+      connection: remote # connection key from this file
+      max_batching_rows: 50
+      user_defined_context:
+        model: fast

@@ -2,6 +2,21 @@
 
 All notable changes to this module are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [2.0.0] - 2026-10-01
+
+### Changed (breaking)
+
+- Tables, views, materialized views and routines are top-level sections (`tables`, `views`, `materialized_views`, `routines`) instead of being nested inside their dataset. Each entry names its dataset with the new, required `dataset` key. Terraform addresses and output keys stay `"<dataset key>.<key>"`, so an upgraded configuration plans with no changes. See [docs/upgrading.md](docs/upgrading.md).
+- Validation messages for these entries use the new paths: `tables.<key>...` instead of `datasets.<dataset>.tables.<key>...`.
+- Keys of datasets, tables, views, materialized views and routines cannot contain `.`, which separates the dataset key from the key in references.
+
+### Added
+
+- `scripts/upgrade-to-v2.py` rewrites v1 configuration files in the v2 layout, keeping comments, flow style and placeholders.
+- References by key alone: `authorized_views`, `authorized_routines` and `table_constraints.foreign_keys[].referenced_table` accept the key of a view, materialized view, routine or table in the file (`authorized_views: [revenue]`). The v1 forms still work.
+- Validation: `dataset` must be a key under `datasets`, with did-you-mean suggestions; a v1 layout gets a message saying how to move each nested section; duplicate keys, which YAML would otherwise drop silently, are reported with their line numbers; tab indentation that stops the file from parsing is reported with its line numbers.
+- Unit tests grew from 81 to 93, with tests for the new layout, references by key and the new checks. Every example and the live-test fixture were planned in their v1 and v2 forms with the real provider, and all 174 resources were identical.
+
 ## [1.0.0] - 2026-09-30
 
 First release.
@@ -22,4 +37,5 @@ First release.
 - JSON Schema for editors, which is also the module's list of allowed keys.
 - Ten examples, 81 unit tests, real-provider plan tests, a live integration test, and CI across Terraform 1.5.7/1.7.5/latest and google provider 7.42.0/latest.
 
+[2.0.0]: https://github.com/dsbip/terraform-google-bigquery-yaml/releases/tag/v2.0.0
 [1.0.0]: https://github.com/dsbip/terraform-google-bigquery-yaml/releases/tag/v1.0.0

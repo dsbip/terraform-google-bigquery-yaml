@@ -14,21 +14,23 @@ run "scalar_sql_function_and_type_spellings" {
     config_yaml = <<-EOT
       datasets:
         udfs:
-          routines:
-            f:
-              description: Adds one
-              arguments:
-                - { name: simple, data_type: int64 }
-                - { name: alias, data_type: INTEGER }
-                - { name: legacy_float, data_type: FLOAT }
-                - { name: raw_json, data_type: '{"typeKind":"STRING"}' }
-                - name: nested
-                  data_type:
-                    typeKind: ARRAY
-                    arrayElementType: { typeKind: STRING }
-                - { name: anything, argument_kind: ANY_TYPE }
-              return_type: BOOLEAN
-              definition_body: simple + 1 > 0
+
+      routines:
+        f:
+          dataset: udfs
+          description: Adds one
+          arguments:
+            - { name: simple, data_type: int64 }
+            - { name: alias, data_type: INTEGER }
+            - { name: legacy_float, data_type: FLOAT }
+            - { name: raw_json, data_type: '{"typeKind":"STRING"}' }
+            - name: nested
+              data_type:
+                typeKind: ARRAY
+                arrayElementType: { typeKind: STRING }
+            - { name: anything, argument_kind: ANY_TYPE }
+          return_type: BOOLEAN
+          definition_body: simple + 1 > 0
     EOT
   }
 
@@ -69,15 +71,17 @@ run "struct_return_type" {
     config_yaml = <<-EOT
       datasets:
         udfs:
-          routines:
-            s:
-              arguments: [{ name: id, data_type: STRING }]
-              return_type:
-                typeKind: STRUCT
-                structType:
-                  fields:
-                    - { name: id, type: { typeKind: STRING } }
-              definition_body: STRUCT(id AS id)
+
+      routines:
+        s:
+          dataset: udfs
+          arguments: [{ name: id, data_type: STRING }]
+          return_type:
+            typeKind: STRUCT
+            structType:
+              fields:
+                - { name: id, type: { typeKind: STRING } }
+          definition_body: STRUCT(id AS id)
     EOT
   }
 
@@ -94,31 +98,35 @@ run "table_valued_function" {
     config_yaml = <<-EOT
       datasets:
         udfs:
-          routines:
-            tvf:
-              routine_type: TABLE_VALUED_FUNCTION
-              arguments: [{ name: min_amount, data_type: NUMERIC }]
-              definition_body: SELECT order_id, amount FROM `p.d.orders` WHERE amount > min_amount
-              return_table_type:
+
+      routines:
+        tvf:
+          dataset: udfs
+          routine_type: TABLE_VALUED_FUNCTION
+          arguments: [{ name: min_amount, data_type: NUMERIC }]
+          definition_body: SELECT order_id, amount FROM `p.d.orders` WHERE amount > min_amount
+          return_table_type:
+            columns:
+              - { name: order_id, type: STRING }
+              - { name: amount, type: numeric }
+              - name: tags
+                type: { typeKind: ARRAY, arrayElementType: { typeKind: STRING } }
+        tvf_json:
+          dataset: udfs
+          routine_type: TABLE_VALUED_FUNCTION
+          definition_body: SELECT 1 AS x
+          return_table_type: '{"columns":[{"name":"x","type":{"typeKind":"INT64"}}]}'
+        tvf_table_arg:
+          dataset: udfs
+          routine_type: TABLE_VALUED_FUNCTION
+          definition_body: SELECT * FROM t
+          arguments:
+            - name: t
+              argument_kind: FIXED_TABLE
+              table_type:
                 columns:
-                  - { name: order_id, type: STRING }
-                  - { name: amount, type: numeric }
-                  - name: tags
-                    type: { typeKind: ARRAY, arrayElementType: { typeKind: STRING } }
-            tvf_json:
-              routine_type: TABLE_VALUED_FUNCTION
-              definition_body: SELECT 1 AS x
-              return_table_type: '{"columns":[{"name":"x","type":{"typeKind":"INT64"}}]}'
-            tvf_table_arg:
-              routine_type: TABLE_VALUED_FUNCTION
-              definition_body: SELECT * FROM t
-              arguments:
-                - name: t
-                  argument_kind: FIXED_TABLE
-                  table_type:
-                    columns:
-                      - { name: id, type: STRING }
-                      - { name: "n", type: INT64 } # unquoted, YAML would read n as false
+                  - { name: id, type: STRING }
+                  - { name: "n", type: INT64 } # unquoted, YAML would read n as false
     EOT
   }
 
@@ -156,21 +164,24 @@ run "procedure_and_javascript_from_files" {
           security_mode: INVOKER
       datasets:
         ops:
-          routines:
-            proc:
-              routine_type: PROCEDURE
-              arguments:
-                - { name: days, data_type: INT64, mode: IN }
-                - { name: removed, data_type: INT64, mode: OUT }
-              definition_file: sql/procedure.sql
-              deletion_policy: PREVENT
-            greet:
-              language: javascript
-              determinism_level: DETERMINISTIC
-              imported_libraries: [gs://libs/lodash.min.js]
-              arguments: [{ name: name, data_type: STRING }]
-              return_type: STRING
-              definition_file: js/greet.js
+
+      routines:
+        proc:
+          dataset: ops
+          routine_type: PROCEDURE
+          arguments:
+            - { name: days, data_type: INT64, mode: IN }
+            - { name: removed, data_type: INT64, mode: OUT }
+          definition_file: sql/procedure.sql
+          deletion_policy: PREVENT
+        greet:
+          dataset: ops
+          language: javascript
+          determinism_level: DETERMINISTIC
+          imported_libraries: [gs://libs/lodash.min.js]
+          arguments: [{ name: name, data_type: STRING }]
+          return_type: STRING
+          definition_file: js/greet.js
     EOT
   }
 
@@ -202,29 +213,33 @@ run "masking_remote_and_spark_routines" {
     config_yaml = <<-EOT
       datasets:
         udfs:
-          routines:
-            mask:
-              data_governance_type: DATA_MASKING
-              arguments: [{ name: s, data_type: STRING }]
-              return_type: STRING
-              definition_body: SHA256(s)
-            remote:
-              arguments: [{ name: s, data_type: STRING }]
-              return_type: STRING
-              remote_function_options:
-                endpoint: https://svc.run.app
-                connection: projects/test-project/locations/us/connections/remote
-                max_batching_rows: 50
-                user_defined_context: { mode: fast }
-            spark_proc:
-              routine_type: PROCEDURE
-              language: PYTHON
-              spark_options:
-                connection: projects/test-project/locations/us/connections/spark
-                runtime_version: "2.1"
-                main_file_uri: gs://b/job.py
-                py_file_uris: [gs://b/lib.py]
-                properties: { spark.executor.instances: "2" }
+
+      routines:
+        mask:
+          dataset: udfs
+          data_governance_type: DATA_MASKING
+          arguments: [{ name: s, data_type: STRING }]
+          return_type: STRING
+          definition_body: SHA256(s)
+        remote:
+          dataset: udfs
+          arguments: [{ name: s, data_type: STRING }]
+          return_type: STRING
+          remote_function_options:
+            endpoint: https://svc.run.app
+            connection: projects/test-project/locations/us/connections/remote
+            max_batching_rows: 50
+            user_defined_context: { mode: fast }
+        spark_proc:
+          dataset: udfs
+          routine_type: PROCEDURE
+          language: PYTHON
+          spark_options:
+            connection: projects/test-project/locations/us/connections/spark
+            runtime_version: "2.1"
+            main_file_uri: gs://b/job.py
+            py_file_uris: [gs://b/lib.py]
+            properties: { spark.executor.instances: "2" }
     EOT
   }
 
@@ -264,13 +279,15 @@ run "remote_function_connection_key_resolves" {
           cloud_resource: {}
       datasets:
         udfs:
-          routines:
-            remote:
-              arguments: [{ name: s, data_type: STRING }]
-              return_type: STRING
-              remote_function_options:
-                endpoint: https://svc.run.app
-                connection: remote
+
+      routines:
+        remote:
+          dataset: udfs
+          arguments: [{ name: s, data_type: STRING }]
+          return_type: STRING
+          remote_function_options:
+            endpoint: https://svc.run.app
+            connection: remote
     EOT
   }
 
@@ -287,12 +304,14 @@ run "routine_iam" {
     config_yaml = <<-EOT
       datasets:
         udfs:
-          routines:
-            f:
-              definition_body: "1"
-              iam:
-                - role: roles/bigquery.dataViewer
-                  members: [group:users@example.com]
+
+      routines:
+        f:
+          dataset: udfs
+          definition_body: "1"
+          iam:
+            - role: roles/bigquery.dataViewer
+              members: [group:users@example.com]
     EOT
   }
 

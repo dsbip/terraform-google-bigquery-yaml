@@ -163,8 +163,9 @@ run "existing_datasets_are_not_created" {
           access:
             - role: READER
               members: [group:readers@example.com]
-          tables:
-            new_table: {}
+
+      tables:
+        new_table: { dataset: legacy }
     EOT
   }
 

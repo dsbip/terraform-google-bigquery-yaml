@@ -22,8 +22,18 @@ locals {
 
   # yamldecode() rejects documents that are empty or contain only comments.
   config_is_blank = length(regexall("(?m)^[ \\t]*[^#\\s]", local.config_text)) == 0
-  config_decoded  = local.config_is_blank ? null : yamldecode(local.config_text)
-  config          = try(merge({}, local.config_decoded), {})
+
+  # YAML forbids tabs in indentation, and yamldecode() then reports only "found
+  # character that cannot start any token". When the file does not parse and
+  # has tab-indented lines, validation.tf names those lines instead; any other
+  # parse error is left to yamldecode().
+  config_tab_lines = [
+    for i, line in split("\n", local.config_text) : i + 1 if length(regexall("^[ ]*\\t", line)) > 0
+  ]
+  config_parses     = local.config_is_blank || can(yamldecode(local.config_text))
+  config_tab_failed = !local.config_parses && length(local.config_tab_lines) > 0
+  config_decoded    = local.config_is_blank || local.config_tab_failed ? null : yamldecode(local.config_text)
+  config            = try(merge({}, local.config_decoded), {})
 
   project_id = try(coalesce(try(tostring(local.config.project_id), null), var.project_id), null)
 
@@ -73,26 +83,34 @@ locals {
   # -----------------------------------------------------------------------------
   # Dataset children (tables, views, materialized views, routines)
   #
-  # Flattened to maps keyed "<dataset key>.<child key>". `value` is the YAML
-  # value as written (for validation); `raw` has explicit nulls removed.
+  # Each is a top-level section whose entries name their dataset with
+  # `dataset: <key under datasets>`. Entries are keyed "<dataset key>.<key>",
+  # which is also the resource instance key and the output key. `value` is the
+  # YAML value as written (for validation); `raw` has explicit nulls removed.
   # -----------------------------------------------------------------------------
 
   datasets_input = try(merge({}, local.config.datasets), {})
 
   child_types = ["tables", "views", "materialized_views", "routines"]
 
+  # Grouping (...) keeps a key containing a dot (reported by validation.tf)
+  # from colliding with another entry and failing the plan with a Terraform
+  # error; the first entry wins.
+  children_grouped = {
+    for type in local.child_types : type => {
+      for key, value in try(merge({}, local.config[type]), {}) :
+      "${try(coalesce(tostring(value.dataset), ""), "")}.${key}" => {
+        ds_key = try(coalesce(tostring(value.dataset), ""), "")
+        key    = key
+        path   = "${type}.${key}"
+        value  = value
+        raw    = { for k, v in try(merge({}, value), {}) : k => v if v != null }
+      }...
+    }
+  }
+
   children = {
-    for type in local.child_types : type => merge([
-      for ds_key, ds in local.datasets_input : {
-        for key, value in try(merge({}, ds[type]), {}) : "${ds_key}.${key}" => {
-          ds_key = ds_key
-          key    = key
-          path   = "datasets.${ds_key}.${type}.${key}"
-          value  = value
-          raw    = { for k, v in try(merge({}, value), {}) : k => v if v != null }
-        }
-      }
-    ]...)
+    for type, entries in local.children_grouped : type => { for id, list in entries : id => list[0] }
   }
 
   # -----------------------------------------------------------------------------

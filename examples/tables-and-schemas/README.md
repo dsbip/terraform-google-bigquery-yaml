@@ -7,7 +7,7 @@ Every way of defining a table:
 | `events.page_views` | Schema from a JSON file with nested (`RECORD`) and repeated fields; hourly partitions on a column with expiration; required partition filter; clustering |
 | `events.sessions` | Schema from a YAML file; ingestion-time daily partitioning |
 | `events.customer_scores` | Integer-range partitioning |
-| `events.users`, `events.purchases` | Primary key, and a foreign key from `purchases` to `users` referenced by key (`events.users`) |
+| `events.users`, `events.purchases` | Primary key, and a foreign key from `purchases` to `users` referenced by its key (`users`) |
 | `events.backfill_scratch` | A table that expires on a fixed date |
 | `landing.daily_orders_csv` | External CSV table with an explicit schema and CSV options |
 | `landing.clickstream_parquet` | External hive-partitioned Parquet with schema autodetection |

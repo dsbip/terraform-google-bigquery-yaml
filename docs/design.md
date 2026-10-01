@@ -8,7 +8,7 @@ This page explains how the module turns YAML into resources and why it is built 
 |---|---|
 | `versions.tf` | Terraform and provider version constraints |
 | `variables.tf` | Inputs |
-| `main.tf` | Loading and rendering the YAML, defaults, flattening of dataset children, referenced files |
+| `main.tf` | Loading and rendering the YAML, defaults, linking tables, views, materialized views and routines to their datasets, referenced files |
 | `datasets.tf` | Datasets, access grants, authorized views/datasets/routines |
 | `tables.tf` | Tables, materialized views, views, table IAM |
 | `routines.tf` | Routines, data type conversion, routine IAM |
@@ -27,7 +27,7 @@ config_file ──templatefile()──▶ YAML text ──yamldecode()──▶ 
           ▼
    normalise (main.tf and one file per type)
      • drop explicit nulls, merge builtin < YAML defaults < resource
-     • flatten children to "<dataset key>.<child key>" maps
+     • key tables, views, materialized views and routines by "<dataset key>.<key>"
      • fixed-shape objects: every attribute present, nested blocks as 0/1-element lists
      • resolve references, read referenced files, convert data types
           │
@@ -74,6 +74,10 @@ validation
 ## Decisions
 
 **Mappings, not lists.** Collections are keyed by name, which becomes the for_each key and the Terraform address. Reordering entries never changes addresses, and a duplicate key is impossible, or a YAML error at worst. Overriding the ID (`dataset_id`, ...) keeps the address stable while the BigQuery ID changes.
+
+**Flat sections with a dataset reference.** Tables, views, materialized views and routines are top-level sections, and each entry names its dataset with `dataset: <key>`, as transfers name theirs with `destination_dataset_id`. Every section is at most two levels deep, no matter how many datasets there are, and a long file reads as one list per kind of resource. (v1 nested them inside their dataset; see [upgrading.md](upgrading.md).)
+
+They are still addressed by `"<dataset key>.<key>"`, not by their key alone. That string reads like BigQuery's own `dataset.table`, it is what references to them look like, and it kept every v1 address unchanged, so upgrading needs no state moves. Because `.` separates the two parts, keys cannot contain one. `dataset` must name a key under `datasets` rather than any dataset ID, so a typo is caught at plan time instead of failing in BigQuery during apply. A dataset managed elsewhere is declared with `create: false`, which also supplies its project and location.
 
 **Non-authoritative dataset access.** Grants and authorizations are separate `google_bigquery_dataset_access` resources, not `access` blocks on the dataset. The alternatives each have a problem:
 - `access` blocks on the dataset are authoritative. They cannot include authorized views created in the same apply, because the dataset must exist before the views that authorize themselves on it.

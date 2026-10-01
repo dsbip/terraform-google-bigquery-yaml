@@ -15,22 +15,27 @@ run "schema_sources" {
     config_yaml = <<-EOT
       datasets:
         sales:
-          tables:
-            inline:
-              schema:
-                - { name: order_id, type: STRING, mode: REQUIRED, description: The ID }
-                - name: tags
-                  type: RECORD
-                  mode: REPEATED
-                  fields:
-                    - { name: key, type: STRING }
-            json_string:
-              schema: '[{"name":"x","type":"INT64"}]'
-            from_json_file:
-              schema_file: schemas/orders.json
-            from_yaml_file:
-              schema_file: schemas/orders.yaml
-            no_schema: {}
+
+      tables:
+        inline:
+          dataset: sales
+          schema:
+            - { name: order_id, type: STRING, mode: REQUIRED, description: The ID }
+            - name: tags
+              type: RECORD
+              mode: REPEATED
+              fields:
+                - { name: key, type: STRING }
+        json_string:
+          dataset: sales
+          schema: '[{"name":"x","type":"INT64"}]'
+        from_json_file:
+          dataset: sales
+          schema_file: schemas/orders.json
+        from_yaml_file:
+          dataset: sales
+          schema_file: schemas/orders.yaml
+        no_schema: { dataset: sales }
     EOT
   }
 
@@ -62,25 +67,31 @@ run "partitioning_and_clustering" {
     config_yaml = <<-EOT
       datasets:
         events:
-          tables:
-            by_day:
-              time_partitioning:
-                field: ts
-              clustering: [user_id, page]
-              require_partition_filter: true
-            by_hour:
-              time_partitioning:
-                type: HOUR
-                field: ts
-                expiration_ms: 3600000
-            ingestion_time:
-              time_partitioning: {}
-            by_range:
-              range_partitioning:
-                field: customer_id
-                range: { start: 0, end: 100, interval: 10 }
-            unpartitioned:
-              clustering: []
+
+      tables:
+        by_day:
+          dataset: events
+          time_partitioning:
+            field: ts
+          clustering: [user_id, page]
+          require_partition_filter: true
+        by_hour:
+          dataset: events
+          time_partitioning:
+            type: HOUR
+            field: ts
+            expiration_ms: 3600000
+        ingestion_time:
+          dataset: events
+          time_partitioning: {}
+        by_range:
+          dataset: events
+          range_partitioning:
+            field: customer_id
+            range: { start: 0, end: 100, interval: 10 }
+        unpartitioned:
+          dataset: events
+          clustering: []
     EOT
   }
 
@@ -136,21 +147,24 @@ run "table_settings_and_deletion_protection" {
           labels: { tier: gold }
       datasets:
         sales:
-          tables:
-            defaulted:
-              friendly_name: Defaulted
-              description: Uses the defaults
-            protected:
-              deletion_protection: true
-              deletion_policy: PREVENT
-              expiration_time: 1893456000000
-              max_staleness: "0-0 0 4:0:0"
-              labels: { pii: "true" }
-              resource_tags:
-                "123/env": prod
-              encryption_configuration:
-                kms_key_name: projects/p/locations/us/keyRings/r/cryptoKeys/k
-              ignore_auto_generated_schema: true
+
+      tables:
+        defaulted:
+          dataset: sales
+          friendly_name: Defaulted
+          description: Uses the defaults
+        protected:
+          dataset: sales
+          deletion_protection: true
+          deletion_policy: PREVENT
+          expiration_time: 1893456000000
+          max_staleness: "0-0 0 4:0:0"
+          labels: { pii: "true" }
+          resource_tags:
+            "123/env": prod
+          encryption_configuration:
+            kms_key_name: projects/p/locations/us/keyRings/r/cryptoKeys/k
+          ignore_auto_generated_schema: true
     EOT
   }
 
@@ -184,7 +198,7 @@ run "tables_keep_the_provider_deletion_protection_default" {
   command = plan
 
   variables {
-    config_yaml = "datasets:\n  a:\n    tables:\n      t: {}\n"
+    config_yaml = "datasets:\n  a: {}\ntables:\n  t: { dataset: a }\n"
   }
 
   assert {
@@ -197,7 +211,7 @@ run "table_id_override" {
   command = plan
 
   variables {
-    config_yaml = "datasets:\n  a:\n    dataset_id: sales_prod\n    tables:\n      orders:\n        table_id: orders_v2\n"
+    config_yaml = "datasets:\n  a:\n    dataset_id: sales_prod\ntables:\n  orders:\n    dataset: a\n    table_id: orders_v2\n"
   }
 
   assert {
@@ -217,29 +231,32 @@ run "primary_and_foreign_keys" {
       datasets:
         core:
           dataset_id: core_prod
-          tables:
-            customers:
-              table_id: dim_customer
-              table_constraints:
-                primary_key: { columns: [customer_id] }
-            orders:
-              table_constraints:
-                primary_key: { columns: [order_id] }
-                foreign_keys:
-                  - name: fk_managed
-                    referenced_table: core.customers
-                    column_references: { referencing_column: customer_id, referenced_column: customer_id }
-                  - name: fk_dataset_key
-                    referenced_table: core.products
-                    column_references: { referencing_column: product_id, referenced_column: product_id }
-                  - name: fk_other_dataset
-                    referenced_table: reference.countries
-                    column_references: { referencing_column: country, referenced_column: code }
-                  - name: fk_other_project
-                    referenced_table: shared-project.reference.currencies
-                    column_references: { referencing_column: currency, referenced_column: code }
-                  - referenced_table: { project_id: p2, dataset_id: d2, table_id: t2 }
-                    column_references: { referencing_column: a, referenced_column: b }
+
+      tables:
+        customers:
+          dataset: core
+          table_id: dim_customer
+          table_constraints:
+            primary_key: { columns: [customer_id] }
+        orders:
+          dataset: core
+          table_constraints:
+            primary_key: { columns: [order_id] }
+            foreign_keys:
+              - name: fk_managed
+                referenced_table: core.customers
+                column_references: { referencing_column: customer_id, referenced_column: customer_id }
+              - name: fk_dataset_key
+                referenced_table: core.products
+                column_references: { referencing_column: product_id, referenced_column: product_id }
+              - name: fk_other_dataset
+                referenced_table: reference.countries
+                column_references: { referencing_column: country, referenced_column: code }
+              - name: fk_other_project
+                referenced_table: shared-project.reference.currencies
+                column_references: { referencing_column: currency, referenced_column: code }
+              - referenced_table: { project_id: p2, dataset_id: d2, table_id: t2 }
+                column_references: { referencing_column: a, referenced_column: b }
     EOT
   }
 
@@ -277,49 +294,56 @@ run "external_tables_route_the_schema" {
     config_yaml = <<-EOT
       datasets:
         landing:
-          tables:
-            csv_with_schema:
-              schema_file: schemas/orders.json
-              external_data_configuration:
-                source_format: CSV
-                source_uris: ["gs://b/orders/*.csv"]
-                csv_options: { skip_leading_rows: 1 }
-            parquet_autodetect:
-              external_data_configuration:
-                source_format: PARQUET
-                source_uris: ["gs://b/p/*"]
-                hive_partitioning_options:
-                  mode: AUTO
-                  source_uri_prefix: gs://b/p/
-                  require_partition_filter: true
-                parquet_options: { enable_list_inference: true, enum_as_string: true }
-            biglake_with_connection:
-              schema: [{ name: a, type: STRING }]
-              external_data_configuration:
-                source_format: PARQUET
-                source_uris: ["gs://b/l/*"]
-                connection_id: test-project.us.lake
-                metadata_cache_mode: AUTOMATIC
-            json_options:
-              external_data_configuration:
-                source_format: NEWLINE_DELIMITED_JSON
-                source_uris: ["gs://b/j/*"]
-                autodetect: true
-                compression: GZIP
-                ignore_unknown_values: true
-                max_bad_records: 5
-                json_options: { encoding: UTF-8 }
-            avro:
-              external_data_configuration:
-                source_format: AVRO
-                source_uris: ["gs://b/a/*"]
-                avro_options: { use_avro_logical_types: true }
-            sheet:
-              schema: [{ name: a, type: STRING }]
-              external_data_configuration:
-                source_format: GOOGLE_SHEETS
-                source_uris: ["https://docs.google.com/spreadsheets/d/abc"]
-                google_sheets_options: { range: "Sheet1!A1:B20", skip_leading_rows: 1 }
+
+      tables:
+        csv_with_schema:
+          dataset: landing
+          schema_file: schemas/orders.json
+          external_data_configuration:
+            source_format: CSV
+            source_uris: ["gs://b/orders/*.csv"]
+            csv_options: { skip_leading_rows: 1 }
+        parquet_autodetect:
+          dataset: landing
+          external_data_configuration:
+            source_format: PARQUET
+            source_uris: ["gs://b/p/*"]
+            hive_partitioning_options:
+              mode: AUTO
+              source_uri_prefix: gs://b/p/
+              require_partition_filter: true
+            parquet_options: { enable_list_inference: true, enum_as_string: true }
+        biglake_with_connection:
+          dataset: landing
+          schema: [{ name: a, type: STRING }]
+          external_data_configuration:
+            source_format: PARQUET
+            source_uris: ["gs://b/l/*"]
+            connection_id: test-project.us.lake
+            metadata_cache_mode: AUTOMATIC
+        json_options:
+          dataset: landing
+          external_data_configuration:
+            source_format: NEWLINE_DELIMITED_JSON
+            source_uris: ["gs://b/j/*"]
+            autodetect: true
+            compression: GZIP
+            ignore_unknown_values: true
+            max_bad_records: 5
+            json_options: { encoding: UTF-8 }
+        avro:
+          dataset: landing
+          external_data_configuration:
+            source_format: AVRO
+            source_uris: ["gs://b/a/*"]
+            avro_options: { use_avro_logical_types: true }
+        sheet:
+          dataset: landing
+          schema: [{ name: a, type: STRING }]
+          external_data_configuration:
+            source_format: GOOGLE_SHEETS
+            source_uris: ["https://docs.google.com/spreadsheets/d/abc"]
+            google_sheets_options: { range: "Sheet1!A1:B20", skip_leading_rows: 1 }
     EOT
   }
 
@@ -377,18 +401,20 @@ run "bigtable_external_table" {
     config_yaml = <<-EOT
       datasets:
         landing:
-          tables:
-            bt:
-              external_data_configuration:
-                source_format: BIGTABLE
-                source_uris: ["https://googleapis.com/bigtable/projects/p/instances/i/tables/t"]
-                bigtable_options:
-                  read_rowkey_as_string: true
-                  column_family:
-                    - family_id: cf1
-                      type: STRING
-                      column:
-                        - { qualifier_string: name, field_name: name_col }
+
+      tables:
+        bt:
+          dataset: landing
+          external_data_configuration:
+            source_format: BIGTABLE
+            source_uris: ["https://googleapis.com/bigtable/projects/p/instances/i/tables/t"]
+            bigtable_options:
+              read_rowkey_as_string: true
+              column_family:
+                - family_id: cf1
+                  type: STRING
+                  column:
+                    - { qualifier_string: name, field_name: name_col }
     EOT
   }
 
@@ -409,12 +435,14 @@ run "biglake_managed_table_defaults" {
     config_yaml = <<-EOT
       datasets:
         lake:
-          tables:
-            iceberg:
-              schema: [{ name: id, type: STRING }]
-              biglake_configuration:
-                connection_id: projects/test-project/locations/us/connections/lake
-                storage_uri: gs://b/iceberg/
+
+      tables:
+        iceberg:
+          dataset: lake
+          schema: [{ name: id, type: STRING }]
+          biglake_configuration:
+            connection_id: projects/test-project/locations/us/connections/lake
+            storage_uri: gs://b/iceberg/
     EOT
   }
 
@@ -441,18 +469,21 @@ run "connection_keys_resolve_to_connection_names" {
           cloud_resource: {}
       datasets:
         lake:
-          tables:
-            ext:
-              schema: [{ name: id, type: STRING }]
-              external_data_configuration:
-                source_format: PARQUET
-                source_uris: ["gs://b/x/*"]
-                connection_id: lake
-            iceberg:
-              schema: [{ name: id, type: STRING }]
-              biglake_configuration:
-                connection_id: lake
-                storage_uri: gs://b/iceberg/
+
+      tables:
+        ext:
+          dataset: lake
+          schema: [{ name: id, type: STRING }]
+          external_data_configuration:
+            source_format: PARQUET
+            source_uris: ["gs://b/x/*"]
+            connection_id: lake
+        iceberg:
+          dataset: lake
+          schema: [{ name: id, type: STRING }]
+          biglake_configuration:
+            connection_id: lake
+            storage_uri: gs://b/iceberg/
     EOT
   }
 
@@ -473,16 +504,18 @@ run "table_iam_members" {
     config_yaml = <<-EOT
       datasets:
         sales:
-          tables:
-            orders:
-              iam:
-                - role: roles/bigquery.dataViewer
-                  members: [group:a@example.com, user:b@example.com]
-                - role: roles/bigquery.dataEditor
-                  members: [serviceAccount:etl@test-project.iam.gserviceaccount.com]
-                  condition:
-                    title: business hours
-                    expression: request.time.getHours("Europe/Berlin") < 18
+
+      tables:
+        orders:
+          dataset: sales
+          iam:
+            - role: roles/bigquery.dataViewer
+              members: [group:a@example.com, user:b@example.com]
+            - role: roles/bigquery.dataEditor
+              members: [serviceAccount:etl@test-project.iam.gserviceaccount.com]
+              condition:
+                title: business hours
+                expression: request.time.getHours("Europe/Berlin") < 18
     EOT
   }
 
