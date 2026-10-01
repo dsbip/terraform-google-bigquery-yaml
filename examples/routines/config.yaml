@@ -58,7 +58,6 @@ routines:
     definition_body: LOWER(TRIM(email))
 
   # Complex types as mappings.
-
   split_tags:
     dataset: udfs
     description: Splits a comma-separated list into a de-duplicated array.
@@ -98,7 +97,6 @@ routines:
     definition_file: js/title_case.js
 
   # Table-valued function.
-
   orders_above:
     dataset: udfs
     description: Orders with an amount above a threshold.
@@ -115,7 +113,6 @@ routines:
         - { name: amount, type: NUMERIC }
 
   # Stored procedure with IN and OUT arguments, body from a SQL file.
-
   archive_cancelled_orders:
     dataset: udfs
     description: Deletes cancelled orders and records how many were removed.
@@ -130,7 +127,6 @@ routines:
         members: [group:data-engineers@example.com]
 
   # Data masking function, usable in column-level masking rules.
-
   mask_email:
     dataset: udfs
     description: Keeps the domain of an email address.
@@ -142,7 +138,6 @@ routines:
     definition_body: REGEXP_REPLACE(email, r'^[^@]+', 'xxxxx')
 
   # Remote function calling a Cloud Run service through the connection above.
-
   detect_language:
     dataset: udfs
     description: Detects the language of a text with a Cloud Run service.

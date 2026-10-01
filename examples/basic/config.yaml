@@ -2,6 +2,9 @@
 #
 # Basic example: one dataset with two tables and a view.
 #
+# Datasets, tables and views are separate sections. A table or view is not
+# indented under its dataset; it names it with `dataset: <key>`.
+#
 # The project comes from the module's project_id variable (see main.tf). The
 # module renders this file with templatefile() before parsing it, so the
 # project_id placeholder in the view SQL below becomes that project.

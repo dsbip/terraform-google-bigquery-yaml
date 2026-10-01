@@ -30,12 +30,12 @@ datasets:
           - group:${hr_team_group}
     # Views, datasets and routines allowed to read this dataset.
     authorized_views:
-      - hr_shared.employee_directory # "<dataset key>.<view key>" from this file
-      - hr_shared.headcount_by_department
+      - employee_directory # a view key from this file
+      - hr_shared.headcount_by_department # or "<dataset key>.<view key>"
     authorized_datasets:
       - hr_analytics # every view in hr_analytics
     authorized_routines:
-      - hr_shared.employees_in_department # a table-valued function
+      - employees_in_department # a table-valued function (routine key)
 
   hr_shared:
     description: Employee-facing views over hr_private.

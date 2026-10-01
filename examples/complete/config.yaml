@@ -13,6 +13,10 @@
 #   partner_share  one authorized view for a partner, shared with table IAM
 #   transfers      a Cloud Storage load and two scheduled queries
 #
+# The datasets section declares the datasets only. Tables, views,
+# materialized views and routines follow in their own sections, and each
+# names its dataset with `dataset: <key>`.
+#
 # Placeholders such as $${analysts_group} come from template_vars in main.tf.
 # (Comments are rendered too, hence the $$ escape in this line.)
 

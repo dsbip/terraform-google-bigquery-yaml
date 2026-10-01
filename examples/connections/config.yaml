@@ -86,7 +86,6 @@ tables:
       metadata_cache_mode: AUTOMATIC
 
   # Object table: one row per object (image files here).
-
   product_images:
     dataset: lakehouse
     external_data_configuration:
@@ -96,7 +95,6 @@ tables:
       metadata_cache_mode: AUTOMATIC
 
   # BigLake managed table in Apache Iceberg format.
-
   events_iceberg:
     dataset: lakehouse
     schema:
