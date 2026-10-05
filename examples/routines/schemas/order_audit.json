@@ -1,0 +1,4 @@
+[
+  { "name": "run_at", "type": "TIMESTAMP" },
+  { "name": "archived_orders", "type": "INT64" }
+]

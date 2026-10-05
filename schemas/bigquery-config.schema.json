@@ -1,8 +1,9 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://raw.githubusercontent.com/dsbip/terraform-google-bigquery-yaml/main/schemas/bigquery-config.schema.json",
+  "x-schema-revision": 2,
   "title": "terraform-google-bigquery-yaml configuration",
-  "description": "YAML configuration consumed by the terraform-google-bigquery-yaml module. Map keys under datasets, tables, views, materialized_views, routines, connections and transfers are logical keys; each one is also the default resource ID. The module reads the 'properties' of every definition below to reject unknown keys, so this file is the single source of truth for the configuration shape.",
+  "description": "YAML configuration consumed by the terraform-google-bigquery-yaml module. Map keys under datasets, tables, views, materialized_views, routines, connections and transfers are logical keys; each one is also the default resource ID. Tables, views, materialized views and routines are top-level sections whose entries name their dataset with dataset: <key under datasets>. The module reads the 'properties' of every definition below to reject unknown keys, so this file is the single source of truth for the configuration shape.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -18,9 +19,89 @@
         "object",
         "null"
       ],
-      "description": "Datasets keyed by logical key (the default dataset_id). Tables, views, materialized views and routines are nested inside their dataset.",
+      "description": "Datasets keyed by logical key (the default dataset_id). Tables, views, materialized views and routines are defined in their own top-level sections and reference a dataset by this key.",
       "additionalProperties": {
         "$ref": "#/definitions/dataset"
+      }
+    },
+    "tables": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Tables keyed by logical key (the default table_id). Each names its dataset with dataset: <key under datasets>.",
+      "additionalProperties": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/table"
+          },
+          {
+            "type": "object",
+            "required": [
+              "dataset"
+            ]
+          }
+        ]
+      }
+    },
+    "views": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Logical views keyed by logical key (the default table_id). Each names its dataset with dataset: <key under datasets>.",
+      "additionalProperties": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/view"
+          },
+          {
+            "type": "object",
+            "required": [
+              "dataset"
+            ]
+          }
+        ]
+      }
+    },
+    "materialized_views": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Materialized views keyed by logical key (the default table_id). Each names its dataset with dataset: <key under datasets>.",
+      "additionalProperties": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/materialized_view"
+          },
+          {
+            "type": "object",
+            "required": [
+              "dataset"
+            ]
+          }
+        ]
+      }
+    },
+    "routines": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "UDFs, table-valued functions and stored procedures keyed by logical key (the default routine_id). Each names its dataset with dataset: <key under datasets>.",
+      "additionalProperties": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/routine"
+          },
+          {
+            "type": "object",
+            "required": [
+              "dataset"
+            ]
+          }
+        ]
       }
     },
     "connections": {
@@ -72,10 +153,6 @@
                     "dataset_id",
                     "project_id",
                     "create",
-                    "tables",
-                    "views",
-                    "materialized_views",
-                    "routines",
                     "authorized_views",
                     "authorized_datasets",
                     "authorized_routines"
@@ -94,6 +171,7 @@
               "propertyNames": {
                 "not": {
                   "enum": [
+                    "dataset",
                     "table_id",
                     "schema",
                     "schema_file"
@@ -112,6 +190,7 @@
               "propertyNames": {
                 "not": {
                   "enum": [
+                    "dataset",
                     "table_id",
                     "query",
                     "query_file"
@@ -130,6 +209,7 @@
               "propertyNames": {
                 "not": {
                   "enum": [
+                    "dataset",
                     "table_id",
                     "query",
                     "query_file"
@@ -148,6 +228,7 @@
               "propertyNames": {
                 "not": {
                   "enum": [
+                    "dataset",
                     "routine_id",
                     "definition_body",
                     "definition_file"
@@ -349,7 +430,7 @@
       }
     },
     "table_ref": {
-      "description": "A table or view: \"dataset.table\" (a managed view key or a dataset in the default project), \"project.dataset.table\", or a mapping.",
+      "description": "A table or view: its key in this file (\"orders\"), \"dataset.table\" (a dataset key from this file or a dataset in the default project), \"project.dataset.table\", or a mapping.",
       "oneOf": [
         {
           "type": "string"
@@ -422,7 +503,7 @@
       }
     },
     "routine_ref": {
-      "description": "A routine: \"dataset.routine\" (a managed routine key or a dataset in the default project), \"project.dataset.routine\", or a mapping.",
+      "description": "A routine: its key in this file (\"mask_email\"), \"dataset.routine\" (a dataset key from this file or a dataset in the default project), \"project.dataset.routine\", or a mapping.",
       "oneOf": [
         {
           "type": "string"
@@ -464,7 +545,7 @@
         },
         "project_id": {
           "type": "string",
-          "description": "Project of the dataset and everything nested in it."
+          "description": "Project of the dataset, and of the tables, views, materialized views and routines that reference it."
         },
         "create": {
           "description": "Set to false for a dataset that already exists outside this configuration. Nested tables, views, routines, access grants and authorizations are still managed.",
@@ -624,46 +705,6 @@
           "items": {
             "$ref": "#/definitions/routine_ref"
           }
-        },
-        "tables": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "description": "Tables keyed by logical key (the default table_id).",
-          "additionalProperties": {
-            "$ref": "#/definitions/table"
-          }
-        },
-        "views": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "description": "Logical views keyed by logical key (the default table_id).",
-          "additionalProperties": {
-            "$ref": "#/definitions/view"
-          }
-        },
-        "materialized_views": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "description": "Materialized views keyed by logical key (the default table_id).",
-          "additionalProperties": {
-            "$ref": "#/definitions/materialized_view"
-          }
-        },
-        "routines": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "description": "UDFs, table-valued functions and stored procedures keyed by logical key (the default routine_id).",
-          "additionalProperties": {
-            "$ref": "#/definitions/routine"
-          }
         }
       }
     },
@@ -720,6 +761,10 @@
       ],
       "additionalProperties": false,
       "properties": {
+        "dataset": {
+          "type": "string",
+          "description": "Key of the dataset (under datasets) that this table belongs to. Required. For a dataset managed elsewhere, declare it under datasets with create: false."
+        },
         "table_id": {
           "type": "string",
           "description": "Table ID. Defaults to the map key."
@@ -858,7 +903,7 @@
         "name",
         "type"
       ],
-      "description": "A BigQuery TableFieldSchema. Keys use the BigQuery API (camelCase) names.",
+      "description": "A BigQuery TableFieldSchema. Keys use the BigQuery API (camelCase) names. Inline schemas and schema files are checked against these keys.",
       "properties": {
         "name": {
           "type": "string"
@@ -917,15 +962,7 @@
           "$ref": "#/definitions/schema"
         },
         "policyTags": {
-          "type": "object",
-          "properties": {
-            "names": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          }
+          "$ref": "#/definitions/policy_tags"
         },
         "maxLength": {
           "anyOf": [
@@ -976,10 +1013,68 @@
           "type": "string"
         },
         "rangeElementType": {
-          "type": "object"
+          "$ref": "#/definitions/range_element_type"
         },
         "dataPolicies": {
           "type": "array"
+        },
+        "foreignTypeDefinition": {
+          "type": "string",
+          "description": "Type of the field in an external system (external tables with schema_foreign_type_info)."
+        },
+        "timestampPrecision": {
+          "anyOf": [
+            {
+              "type": [
+                "integer",
+                "string"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ],
+          "description": "Precision of a TIMESTAMP field: 6 (microseconds, the default) or 12 (picoseconds)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "policy_tags": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Column-level security: the policy tags applied to the column.",
+      "properties": {
+        "names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Policy tag resource names: projects/P/locations/L/taxonomies/T/policyTags/ID."
+        }
+      }
+    },
+    "range_element_type": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "description": "Element type of a RANGE column.",
+      "properties": {
+        "type": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "DATE",
+                "DATETIME",
+                "TIMESTAMP"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
         }
       }
     },
@@ -1610,6 +1705,10 @@
       ],
       "additionalProperties": false,
       "properties": {
+        "dataset": {
+          "type": "string",
+          "description": "Key of the dataset (under datasets) that this view belongs to. Required. For a dataset managed elsewhere, declare it under datasets with create: false."
+        },
         "table_id": {
           "type": "string",
           "description": "View ID. Defaults to the map key."
@@ -1690,6 +1789,10 @@
       ],
       "additionalProperties": false,
       "properties": {
+        "dataset": {
+          "type": "string",
+          "description": "Key of the dataset (under datasets) that this materialized view belongs to. Required. For a dataset managed elsewhere, declare it under datasets with create: false."
+        },
         "table_id": {
           "type": "string",
           "description": "Materialized view ID. Defaults to the map key."
@@ -1809,6 +1912,10 @@
       ],
       "additionalProperties": false,
       "properties": {
+        "dataset": {
+          "type": "string",
+          "description": "Key of the dataset (under datasets) that this routine belongs to. Required. For a dataset managed elsewhere, declare it under datasets with create: false."
+        },
         "routine_id": {
           "type": "string",
           "description": "Routine ID. Defaults to the map key."

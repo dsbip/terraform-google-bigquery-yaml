@@ -1,0 +1,4 @@
+SELECT order_date, country_code, COUNT(*) AS orders, SUM(amount) AS revenue
+FROM `${project_id}.core.fct_orders`
+WHERE status = 'COMPLETED'
+GROUP BY order_date, country_code

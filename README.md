@@ -26,30 +26,42 @@ datasets:
     access:
       - role: READER
         members: [group:analysts@example.com]
-    authorized_views: [reporting.revenue_by_day]   # reporting.revenue_by_day may read sales
-    tables:
-      orders:
-        schema_file: schemas/orders.json
-        time_partitioning: { field: ordered_at }
-        clustering: [customer_id]
+    authorized_views: [revenue_by_day]   # the view below may read sales
 
-  reporting:
-    views:
-      revenue_by_day:
-        query: |
-          SELECT DATE(ordered_at) AS day, SUM(amount) AS revenue
-          FROM `${project_id}.sales.orders`
-          GROUP BY day
+  reporting: {}
+
+tables:
+  orders:
+    dataset: sales
+    schema_file: schemas/orders.json
+    time_partitioning: { field: ordered_at }
+    clustering: [customer_id]
+
+views:
+  revenue_by_day:
+    dataset: reporting
+    query_file: sql/revenue_by_day.sql.tftpl
 ```
+
+```sql
+-- sql/revenue_by_day.sql.tftpl
+SELECT DATE(ordered_at) AS day, SUM(amount) AS revenue
+FROM `${project_id}.sales.orders`
+GROUP BY day
+```
+
+Datasets, tables, views, materialized views and routines are separate top-level sections. A table, view or routine is not indented under its dataset; it names it with `dataset: <key>`. Table schemas live in JSON files (`schema_file`), view SQL in SQL files (`query_file`) and routine bodies in their own files (`definition_file`), next to the YAML; inline `schema:`, `query:` and `definition_body:` work too.
 
 ```hcl
 module "bigquery" {
-  source = "github.com/dsbip/terraform-google-bigquery-yaml?ref=v1.0.0"
+  source = "github.com/dsbip/terraform-google-bigquery-yaml?ref=v2.0.0"
 
   project_id  = "my-project"
   config_file = "${path.module}/config.yaml"
 }
 ```
+
+Upgrading from v1, where tables and views were nested inside their dataset? See [docs/upgrading.md](docs/upgrading.md); no state changes are needed.
 
 ## Contents
 
@@ -62,6 +74,7 @@ module "bigquery" {
 - [Documentation](#documentation)
 - [Testing](#testing)
 - [Limitations](#limitations)
+- [Upgrading from v1](docs/upgrading.md)
 
 ## Features
 
@@ -69,18 +82,20 @@ module "bigquery" {
 |---|---|---|
 | `datasets.<key>` | `google_bigquery_dataset` | [datasets.md](docs/datasets.md) |
 | `datasets.<key>.access` | `google_bigquery_dataset_access` (non-authoritative grants) | [datasets.md](docs/datasets.md#access-grants) |
-| `datasets.<key>.tables` | `google_bigquery_table` | [tables.md](docs/tables.md) |
-| `datasets.<key>.views` / `.materialized_views` | `google_bigquery_table` (view / materialized view) | [views.md](docs/views.md) |
+| `tables.<key>` | `google_bigquery_table` | [tables.md](docs/tables.md) |
+| `views.<key>` / `materialized_views.<key>` | `google_bigquery_table` (view / materialized view) | [views.md](docs/views.md) |
 | `datasets.<key>.authorized_views` / `_datasets` / `_routines` | `google_bigquery_dataset_access` | [authorized-views.md](docs/authorized-views.md) |
-| `datasets.<key>.routines` | `google_bigquery_routine` | [routines.md](docs/routines.md) |
+| `routines.<key>` | `google_bigquery_routine` | [routines.md](docs/routines.md) |
 | `connections.<key>` | `google_bigquery_connection` | [connections.md](docs/connections.md) |
 | `transfers.<key>` | `google_bigquery_data_transfer_config` | [transfers.md](docs/transfers.md) |
 | `iam:` on tables, views, routines, connections | `google_bigquery_*_iam_member` | [configuration.md](docs/configuration.md#iam-bindings) |
 
+Every entry under `tables`, `views`, `materialized_views` and `routines` has a `dataset:` key naming its dataset under `datasets`, and takes the dataset's project and dataset ID from it.
+
 Across the whole configuration:
 
 - **Defaults** for every resource type (`defaults.tables.deletion_protection`, `defaults.location`, ...), with labels merged at every level.
-- **References by key.** `connection_id: lake`, `authorized_views: [reporting.v]` and `destination_dataset_id: reporting` resolve to real IDs, even when you override them.
+- **References by key.** `dataset: sales`, `connection_id: lake`, `referenced_table: customers`, `authorized_views: [revenue_by_day]` and `destination_dataset_id: reporting` resolve to real IDs, even when you override them.
 - **Templating.** `config_file` is rendered with `templatefile()`, so one YAML serves every environment. SQL files ending in `.tftpl` are rendered too ([templating.md](docs/templating.md)).
 - **Validation before anything is planned.** Unknown keys (with suggestions), wrong shapes, missing files, unresolvable references and more are all reported together, each with its YAML path ([validation.md](docs/validation.md)).
 - **A JSON Schema** ([schemas/bigquery-config.schema.json](schemas/bigquery-config.schema.json)) for autocompletion and inline errors in VS Code and JetBrains IDEs.
@@ -102,7 +117,7 @@ The identity running Terraform needs `roles/bigquery.admin` (or narrower roles c
 
 ```hcl
 module "bigquery" {
-  source = "github.com/dsbip/terraform-google-bigquery-yaml?ref=v1.0.0"
+  source = "github.com/dsbip/terraform-google-bigquery-yaml?ref=v2.0.0"
 
   project_id  = var.project_id                  # default project for everything in the file
   config_file = "${path.module}/bigquery.yaml"  # rendered with templatefile()
@@ -124,7 +139,7 @@ module "bigquery" {
 To get IDE autocompletion and validation, put this line at the top of the YAML file (the VS Code YAML extension and JetBrains IDEs understand it):
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/dsbip/terraform-google-bigquery-yaml/v1.0.0/schemas/bigquery-config.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/dsbip/terraform-google-bigquery-yaml/v2.0.0/schemas/bigquery-config.schema.json
 ```
 
 For larger estates, call the module once per domain or per layer: one YAML file each, chained with `depends_on` where one layer reads another ([layered-views example](examples/layered-views)).
@@ -147,7 +162,7 @@ For larger estates, call the module once per domain or per layer: one YAML file 
 |---|---|
 | `project_id` | The resolved default project. |
 | `datasets` | Created datasets by key: `id`, `project`, `dataset_id`, `location`, `self_link`. |
-| `tables` | Tables by `"<dataset key>.<table key>"`: `id`, `project`, `dataset_id`, `table_id`, `self_link`. |
+| `tables` | Tables by `"<dataset key>.<table key>"` (e.g. `"sales.orders"` for `tables.orders` with `dataset: sales`): `id`, `project`, `dataset_id`, `table_id`, `self_link`. |
 | `views` | Views, same shape as `tables`. |
 | `materialized_views` | Materialized views, same shape as `tables`. |
 | `routines` | Routines by `"<dataset key>.<routine key>"`: `id`, `project`, `dataset_id`, `routine_id`, `routine_type`. |
@@ -191,13 +206,14 @@ Each example is a runnable root module with a commented `config.yaml`; see [exam
 | [design.md](docs/design.md) | How the module works, resource ordering, decisions |
 | [testing.md](docs/testing.md) | Test layers and how to run them, including the live test |
 | [troubleshooting.md](docs/troubleshooting.md) | Common errors and YAML pitfalls |
+| [upgrading.md](docs/upgrading.md) | Moving a v1 configuration to the v2 layout |
 
 ## Testing
 
 The module has four test layers, run by CI on every push:
 
 1. `terraform fmt` and `terraform validate`
-2. **81 unit tests** (`terraform test`, mocked provider): every feature, precedence rule and validation message, on Terraform 1.7 and latest with provider 7.42 and latest
+2. **103 unit tests** (`terraform test`, mocked provider): every feature, precedence rule and validation message, on Terraform 1.7 and latest with provider 7.42 and latest
 3. **Real-provider plans** of all ten examples and the live-test fixture, without Google Cloud access, on Terraform 1.5.7 with provider 7.42.0 and on the latest versions; plus JSON Schema checks
 4. **A live test** that deploys into a real project, checks that a second plan is empty, updates in place and destroys everything (run on demand)
 

@@ -1,0 +1,4 @@
+[
+  { "name": "order_id", "type": "STRING" },
+  { "name": "amount", "type": "NUMERIC" }
+]

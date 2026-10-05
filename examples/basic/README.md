@@ -19,6 +19,8 @@ Needs only the BigQuery API. Everything is destroyable (`terraform destroy -var 
 |---|---|
 | `main.tf` | Provider and module call |
 | `config.yaml` | The BigQuery configuration |
+| `schemas/customers.json`, `schemas/orders.json` | Table schemas, referenced with `schema_file` |
+| `sql/revenue_by_country.sql.tftpl` | The view's SQL, referenced with `query_file` |
 
 ## Creates
 

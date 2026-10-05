@@ -1,0 +1,6 @@
+[
+  { "name": "customer_id", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "email", "type": "STRING" },
+  { "name": "country_code", "type": "STRING" },
+  { "name": "updated_at", "type": "TIMESTAMP" }
+]

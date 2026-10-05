@@ -16,24 +16,41 @@ locals {
     for k, c in local.children.materialized_views : k => merge(local.builtin_defaults.materialized_views, local.type_defaults.materialized_views, c.raw)
   }
 
-  # Real IDs of every table, keyed like the YAML ("dataset_key.table_key").
+  # Real IDs of every table, keyed "<dataset key>.<table key>". A dataset that
+  # is not a key under datasets (reported by validation.tf) gives an empty
+  # dataset_id.
   table_ids = {
     for k, m in local.tables_merged : k => {
-      project_id = local.datasets[local.children.tables[k].ds_key].project
-      dataset_id = local.datasets[local.children.tables[k].ds_key].dataset_id
+      project_id = try(local.datasets[local.children.tables[k].ds_key].project, local.project_id)
+      dataset_id = try(local.datasets[local.children.tables[k].ds_key].dataset_id, "")
       table_id   = try(tostring(m.table_id), local.children.tables[k].key)
     }
   }
 
-  # Schema JSON from schema_file (JSON or YAML) or from an inline schema (a list
-  # of fields or a JSON string).
+  # Table key alone ("orders") => "<dataset key>.<table key>", for references.
+  table_addresses_by_key = { for k, c in local.children.tables : c.key => k }
+
+  # Decoded schema files (JSON, or YAML for *.yaml / *.yml), null when unreadable.
+  table_schema_files = {
+    for k, m in local.tables_merged : k => (
+      can(regex("(?i)\\.ya?ml(\\.tftpl)?$", local.file_paths["tables|${k}|schema_file"]))
+      ? try(yamldecode(local.file_contents["tables|${k}|schema_file"]), null)
+      : try(jsondecode(local.file_contents["tables|${k}|schema_file"]), null)
+    )
+    if contains(keys(local.file_contents), "tables|${k}|schema_file")
+  }
+
+  # Schema JSON from schema_file or from an inline schema (a list of fields or a
+  # JSON string). A file holds a list of fields (`bq show --schema`) or a
+  # TableSchema object, {"fields": [...]}, as in the BigQuery API.
   table_schema_candidates = {
     for k, m in local.tables_merged : k => (
-      contains(keys(local.file_contents), "tables|${k}|schema_file")
-      ? (
-        can(regex("(?i)\\.ya?ml(\\.tftpl)?$", local.file_paths["tables|${k}|schema_file"]))
-        ? try(jsonencode(yamldecode(local.file_contents["tables|${k}|schema_file"])), null)
-        : try(jsonencode(jsondecode(local.file_contents["tables|${k}|schema_file"])), null)
+      contains(keys(local.table_schema_files), k)
+      ? try(
+        can(concat(local.table_schema_files[k], []))
+        ? jsonencode(local.table_schema_files[k])
+        : try(jsonencode(local.table_schema_files[k].fields), null),
+        null
       )
       : try(can(tostring(m.schema)) ? tostring(m.schema) : jsonencode(m.schema), null)
     )
@@ -112,6 +129,7 @@ locals {
                   table_id   = try(coalesce(tostring(fk.referenced_table.table_id), ""), "")
                 } :
                 contains(keys(local.table_ids), fk.referenced_table) ? local.table_ids[fk.referenced_table] :
+                contains(keys(local.table_addresses_by_key), fk.referenced_table) ? local.table_ids[local.table_addresses_by_key[fk.referenced_table]] :
                 length(split(".", fk.referenced_table)) == 2 ? {
                   project_id = try(local.datasets[split(".", fk.referenced_table)[0]].project, local.table_ids[k].project_id)
                   dataset_id = try(local.datasets[split(".", fk.referenced_table)[0]].dataset_id, split(".", fk.referenced_table)[0])
@@ -232,8 +250,8 @@ locals {
     for k, m in local.views_merged : k => {
       path                = local.children.views[k].path
       ds_key              = local.children.views[k].ds_key
-      project             = local.datasets[local.children.views[k].ds_key].project
-      dataset_id          = local.datasets[local.children.views[k].ds_key].dataset_id
+      project             = try(local.datasets[local.children.views[k].ds_key].project, local.project_id)
+      dataset_id          = try(local.datasets[local.children.views[k].ds_key].dataset_id, "")
       table_id            = try(tostring(m.table_id), local.children.views[k].key)
       friendly_name       = try(m.friendly_name, null)
       description         = try(m.description, null)
@@ -252,8 +270,8 @@ locals {
     for k, m in local.materialized_views_merged : k => {
       path                             = local.children.materialized_views[k].path
       ds_key                           = local.children.materialized_views[k].ds_key
-      project                          = local.datasets[local.children.materialized_views[k].ds_key].project
-      dataset_id                       = local.datasets[local.children.materialized_views[k].ds_key].dataset_id
+      project                          = try(local.datasets[local.children.materialized_views[k].ds_key].project, local.project_id)
+      dataset_id                       = try(local.datasets[local.children.materialized_views[k].ds_key].dataset_id, "")
       table_id                         = try(tostring(m.table_id), local.children.materialized_views[k].key)
       friendly_name                    = try(m.friendly_name, null)
       description                      = try(m.description, null)

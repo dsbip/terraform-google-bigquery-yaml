@@ -1,0 +1,46 @@
+# v1 layout with the formatting cases scripts/upgrade-to-v2.py must handle.
+project_id: ${project_id}
+
+defaults:
+  tables:
+    deletion_protection: false
+
+datasets:   # a comment after the section header
+  sales:
+    description: Stays on the dataset.
+    # Comment above a section header: moves with the first entry.
+    tables:
+      # Comment above the first entry.
+      orders:
+        schema:
+          - { name: id, type: STRING }
+        description: |
+          A block scalar with lines that look like keys:
+          views:
+            x: y
+
+      empty_entry:
+      null_entry: ~
+      empty_mapping: {}
+      flow: { table_id: flow_t }    # flow style with a comment
+    views:
+      v: { query: SELECT 1 }
+    labels: { kept: "yes" }
+
+  "on":
+    routines:
+      f:
+        definition_body: "1"
+
+  only_children:
+    materialized_views: {}
+    tables:
+      t2:
+        description: x
+
+  untouched:
+    location: EU
+
+connections:
+  c:
+    cloud_resource: {}

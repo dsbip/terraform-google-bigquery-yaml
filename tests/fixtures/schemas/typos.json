@@ -1,0 +1,19 @@
+{
+  "fields": [
+    { "name": "id", "type": "STRING" },
+    {
+      "name": "l1", "type": "RECORD", "fields": [
+        {
+          "name": "l2", "type": "RECORD", "fields": [
+            {
+              "name": "l3", "type": "STRUCT", "fields": [
+                { "name": "l4", "type": "RECORD", "fields": [{ "name": "l5", "type": "BOOLEN" }] }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "not a field"
+  ]
+}

@@ -1,0 +1,6 @@
+[
+  { "name": "customer_id", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "email", "type": "STRING", "description": "Normalised email" },
+  { "name": "country_code", "type": "STRING" },
+  { "name": "first_order_date", "type": "DATE" }
+]

@@ -5,8 +5,8 @@ The module is tested in four layers. The first three need no Google Cloud access
 | Layer | Tool | What it proves | Where |
 |---|---|---|---|
 | Static | `terraform fmt`, `terraform validate` | Formatting; valid HCL against the provider schema | module root |
-| Unit | `terraform test` with a mocked provider | Every feature, default, precedence rule, reference resolution and validation message | `tests/*.tftest.hcl` (81 tests) |
-| Plan | pytest + real provider, dummy credentials | Every example and the live fixture pass the real provider's validation and plan logic; examples match the JSON Schema; schema and module agree | `tests/python/test_example_plans.py`, `test_schema.py` |
+| Unit | `terraform test` with a mocked provider | Every feature, default, precedence rule, reference resolution and validation message | `tests/*.tftest.hcl` (103 tests) |
+| Plan | pytest + real provider, dummy credentials | Every example and the live fixture pass the real provider's validation and plan logic; examples match the JSON Schema; schema and module agree; docs cover every key; the v1 upgrade script keeps meaning and comments | `tests/python/test_example_plans.py`, `test_schema.py`, `test_docs.py`, `test_upgrade_script.py` |
 | Live | pytest + real provider, real project | Resources deploy, a second plan is empty (no drift), in-place updates work, destroy is clean | `tests/python/test_live.py`, `tests/integration/` |
 
 ## Requirements
@@ -42,7 +42,7 @@ TERRAFORM_BIN=/path/to/terraform-1.5.7 GOOGLE_PROVIDER_VERSION=7.42.0 python -m 
 
 ## Unit tests
 
-Each file in `tests/` covers one area: `config`, `datasets`, `tables`, `views`, `authorized`, `routines`, `connections`, `transfers`, `validation`, `examples`. Runs use inline YAML (`config_yaml`) or fixtures from `tests/fixtures/`, and assert on planned attributes. Most runs are `command = plan`; a few use `command = apply`, where the mocked provider fills in computed attributes such as a connection's name.
+Each file in `tests/` covers one area: `config`, `layout` (top-level sections and references by key), `files` (schema and SQL files), `datasets`, `tables`, `views`, `authorized`, `routines`, `connections`, `transfers`, `validation`, `examples`. Runs use inline YAML (`config_yaml`) or fixtures from `tests/fixtures/`, and assert on planned attributes. Most runs are `command = plan`; a few use `command = apply`, where the mocked provider fills in computed attributes such as a connection's name.
 
 Validation tests plant several mistakes and compare the complete set of messages:
 
@@ -53,7 +53,7 @@ run "table_rules" {
   expect_failures = [terraform_data.validation]
   assert {
     condition = toset(local.validation_errors) == toset([
-      "datasets.sales.tables.both_schemas: set schema or schema_file, not both",
+      "tables.both_schemas: set schema or schema_file, not both",
       ...
     ])
     error_message = "Unexpected messages: ${jsonencode(local.validation_errors)}"
@@ -68,6 +68,8 @@ A missing message or a spurious extra one both fail the test.
 `test_example_plans.py` copies the repository to a temporary directory and runs `terraform init` and `terraform plan -refresh=false` in every example with a dummy `GOOGLE_OAUTH_ACCESS_TOKEN`. The provider needs no API calls to plan new resources, so the plans exercise its full validation and diff logic offline. Each test checks the exact number of planned resources. The live-test fixture is planned the same way, with all optional parts enabled, so it stays deployable.
 
 `test_schema.py` validates the JSON Schema itself, checks that every example conforms to it and that invalid samples are rejected, and checks that the schema and `validation.tf` agree.
+
+`test_upgrade_script.py` runs `scripts/upgrade-to-v2.py` on v1 files in `tests/fixtures/v1/` (the v1 complete example and a file of formatting edge cases). It checks that the parsed result equals the v1 data with the children moved out, that every comment survives, that v2 files are left unchanged, and that layouts the script cannot rewrite safely are reported and left alone.
 
 ## Live test
 

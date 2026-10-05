@@ -11,21 +11,14 @@ datasets:
   staging:
     description: Cleaned source data.
     delete_contents_on_destroy: true
-    tables:
-      orders_raw:
-        schema:
-          - { name: order_id, type: STRING }
-          - { name: customer_id, type: STRING }
-          - { name: amount, type: NUMERIC }
-          - { name: status, type: STRING }
-          - { name: loaded_at, type: TIMESTAMP }
-    views:
-      orders:
-        description: Deduplicated orders.
-        query: |
-          SELECT * EXCEPT (rn)
-          FROM (
-            SELECT *, ROW_NUMBER() OVER (PARTITION BY order_id ORDER BY loaded_at DESC) AS rn
-            FROM `${project_id}.staging.orders_raw`
-          )
-          WHERE rn = 1
+
+tables:
+  orders_raw:
+    dataset: staging
+    schema_file: schemas/orders_raw.json
+
+views:
+  orders:
+    dataset: staging
+    description: Deduplicated orders.
+    query_file: sql/orders.sql.tftpl

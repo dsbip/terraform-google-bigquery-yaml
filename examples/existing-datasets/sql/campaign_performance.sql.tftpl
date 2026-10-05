@@ -1,0 +1,5 @@
+SELECT s.campaign_id, c.country_name, SUM(s.spend) AS spend
+FROM `${project_id}.legacy_warehouse.campaign_spend` AS s
+JOIN `${reference_project}.reference_data.countries` AS c
+  ON c.country_code = SUBSTR(s.campaign_id, 1, 2)
+GROUP BY s.campaign_id, c.country_name

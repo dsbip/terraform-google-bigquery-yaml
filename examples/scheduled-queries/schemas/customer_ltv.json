@@ -1,0 +1,5 @@
+[
+  { "name": "customer_id", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "lifetime_value", "type": "NUMERIC" },
+  { "name": "last_order_at", "type": "TIMESTAMP" }
+]

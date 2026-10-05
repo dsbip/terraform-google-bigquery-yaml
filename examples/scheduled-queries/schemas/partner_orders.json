@@ -1,0 +1,6 @@
+[
+  { "name": "order_id", "type": "STRING" },
+  { "name": "partner", "type": "STRING" },
+  { "name": "amount", "type": "NUMERIC" },
+  { "name": "exported_at", "type": "TIMESTAMP" }
+]

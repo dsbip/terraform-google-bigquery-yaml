@@ -26,8 +26,8 @@ locals {
     for k, m in local.routines_merged : k => {
       path                 = local.children.routines[k].path
       ds_key               = local.children.routines[k].ds_key
-      project              = local.datasets[local.children.routines[k].ds_key].project
-      dataset_id           = local.datasets[local.children.routines[k].ds_key].dataset_id
+      project              = try(local.datasets[local.children.routines[k].ds_key].project, local.project_id)
+      dataset_id           = try(local.datasets[local.children.routines[k].ds_key].dataset_id, "")
       routine_id           = try(tostring(m.routine_id), local.children.routines[k].key)
       routine_type         = try(upper(tostring(m.routine_type)), "SCALAR_FUNCTION")
       language             = try(upper(tostring(m.language)), null)

@@ -9,7 +9,7 @@ Issues and pull requests are welcome.
 
 ## Making a change
 
-1. Add or change the key in `schemas/bigquery-config.schema.json`, with a description. The module reads its allowed keys from this file.
+1. Add or change the key in `schemas/bigquery-config.schema.json`, with a description. The module reads its allowed keys from this file. If the `.tf` code starts to depend on something new in the schema (a new definition, a new top-level section), bump `"x-schema-revision"` in the schema and `schema_revision` in `main.tf` together, so that a copy of the module with an older schema file is reported clearly.
 2. Normalise the value in the resource's `.tf` file. Keep the pattern of the surrounding code:
    - wrap lookups in `try()` so bad input reaches validation instead of failing the plan;
    - represent nested blocks as 0/1-element lists;
