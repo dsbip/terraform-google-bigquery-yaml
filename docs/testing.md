@@ -5,7 +5,7 @@ The module is tested in four layers. The first three need no Google Cloud access
 | Layer | Tool | What it proves | Where |
 |---|---|---|---|
 | Static | `terraform fmt`, `terraform validate` | Formatting; valid HCL against the provider schema | module root |
-| Unit | `terraform test` with a mocked provider | Every feature, default, precedence rule, reference resolution and validation message | `tests/*.tftest.hcl` (93 tests) |
+| Unit | `terraform test` with a mocked provider | Every feature, default, precedence rule, reference resolution and validation message | `tests/*.tftest.hcl` (98 tests) |
 | Plan | pytest + real provider, dummy credentials | Every example and the live fixture pass the real provider's validation and plan logic; examples match the JSON Schema; schema and module agree; docs cover every key; the v1 upgrade script keeps meaning and comments | `tests/python/test_example_plans.py`, `test_schema.py`, `test_docs.py`, `test_upgrade_script.py` |
 | Live | pytest + real provider, real project | Resources deploy, a second plan is empty (no drift), in-place updates work, destroy is clean | `tests/python/test_live.py`, `tests/integration/` |
 
@@ -42,7 +42,7 @@ TERRAFORM_BIN=/path/to/terraform-1.5.7 GOOGLE_PROVIDER_VERSION=7.42.0 python -m 
 
 ## Unit tests
 
-Each file in `tests/` covers one area: `config`, `layout` (top-level sections and references by key), `datasets`, `tables`, `views`, `authorized`, `routines`, `connections`, `transfers`, `validation`, `examples`. Runs use inline YAML (`config_yaml`) or fixtures from `tests/fixtures/`, and assert on planned attributes. Most runs are `command = plan`; a few use `command = apply`, where the mocked provider fills in computed attributes such as a connection's name.
+Each file in `tests/` covers one area: `config`, `layout` (top-level sections and references by key), `files` (schema and SQL files), `datasets`, `tables`, `views`, `authorized`, `routines`, `connections`, `transfers`, `validation`, `examples`. Runs use inline YAML (`config_yaml`) or fixtures from `tests/fixtures/`, and assert on planned attributes. Most runs are `command = plan`; a few use `command = apply`, where the mocked provider fills in computed attributes such as a connection's name.
 
 Validation tests plant several mistakes and compare the complete set of messages:
 

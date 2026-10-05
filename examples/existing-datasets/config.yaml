@@ -49,19 +49,11 @@ tables:
   campaign_spend:
     dataset: warehouse
     description: Daily spend per campaign, loaded by the marketing team.
-    schema:
-      - { name: campaign_id, type: STRING, mode: REQUIRED }
-      - { name: spend_date, type: DATE, mode: REQUIRED }
-      - { name: spend, type: NUMERIC }
+    schema_file: schemas/campaign_spend.json
     time_partitioning:
       field: spend_date
 
 views:
   campaign_performance:
     dataset: marketing
-    query: |
-      SELECT s.campaign_id, c.country_name, SUM(s.spend) AS spend
-      FROM `${project_id}.legacy_warehouse.campaign_spend` AS s
-      JOIN `${reference_project}.reference_data.countries` AS c
-        ON c.country_code = SUBSTR(s.campaign_id, 1, 2)
-      GROUP BY s.campaign_id, c.country_name
+    query_file: sql/campaign_performance.sql.tftpl

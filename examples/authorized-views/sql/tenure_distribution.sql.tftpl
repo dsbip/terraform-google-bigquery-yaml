@@ -1,0 +1,5 @@
+SELECT department,
+       DATE_DIFF(CURRENT_DATE(), hired_on, YEAR) AS tenure_years,
+       COUNT(*) AS employees
+FROM `${project_id}.hr_private.employees`
+GROUP BY department, tenure_years

@@ -119,6 +119,9 @@ locals {
       )
     ]),
 
+    # Table schema fields (inline and from schema files)
+    [for f in local.schema_fields : { path = f.path, value = f.value, def = "schema_field" }],
+
     # Routines
     flatten([
       for c in values(local.children.routines) : concat(
@@ -519,7 +522,7 @@ locals {
   table_errors = flatten([
     for k, t in local.tables : concat(
       can(local.tables_merged[k].schema) && can(local.tables_merged[k].schema_file) ? ["${t.path}: set schema or schema_file, not both"] : [],
-      contains(keys(local.file_contents), "tables|${k}|schema_file") && local.table_schemas[k] == null ? ["${t.path}.schema_file: ${local.file_paths["tables|${k}|schema_file"]} is not a JSON or YAML list of fields"] : [],
+      contains(keys(local.file_contents), "tables|${k}|schema_file") && local.table_schemas[k] == null ? ["${t.path}.schema_file: ${local.file_paths["tables|${k}|schema_file"]} is not a list of fields, or {\"fields\": [...]}, in JSON or YAML"] : [],
       !can(local.tables_merged[k].schema_file) && can(local.tables_merged[k].schema) && local.table_schemas[k] == null ? ["${t.path}.schema: must be a list of fields or a JSON string"] : [],
       length(t.time_partitioning) > 0 && length(t.range_partitioning) > 0 ? ["${t.path}: set time_partitioning or range_partitioning, not both"] : [],
       length(t.external_data_configuration) > 0 && length(t.biglake_configuration) > 0 ? ["${t.path}: set external_data_configuration or biglake_configuration, not both"] : [],
@@ -541,6 +544,34 @@ locals {
         can(m.query) && can(m.query_file) ? "${local.children[type][k].path}: set query or query_file, not both" :
         !can(m.query) && !can(m.query_file) ? "${local.children[type][k].path}: query or query_file is required" :
         ""
+      )
+    ]
+  ])
+
+  # SQL of views and materialized views: empty queries, and placeholders in a
+  # file that is not rendered. Only *.tftpl files are rendered, so a .sql file
+  # using ${project_id} would reach BigQuery as written. Other ${...} text can be
+  # legitimate SQL (e.g. in a string literal) and is left alone.
+  sql_template_names = concat(["project_id", "datasets"], try(keys(var.template_vars), []))
+
+  query_content_errors = flatten([
+    for type, entries in { views = local.views, materialized_views = local.materialized_views } : [
+      for k, v in entries : concat(
+        try(trimspace(v.query), "-") != "" ? [] : [
+          contains(keys(local.file_contents), "${type}|${k}|query_file")
+          ? "${v.path}.query_file: ${local.file_paths["${type}|${k}|query_file"]} is empty"
+          : "${v.path}.query: is empty"
+        ],
+        [
+          for names in [
+            distinct([
+              for name in flatten(try(regexall("\\$\\{\\s*([A-Za-z_][A-Za-z0-9_]*)", v.query), [])) : name
+              if contains(local.sql_template_names, name)
+            ])
+          ] :
+          "${v.path}.query_file: ${local.file_paths["${type}|${k}|query_file"]} uses ${join(", ", formatlist("$${%s}", names))}, but only files ending in .tftpl are rendered; rename it to ${local.file_paths["${type}|${k}|query_file"]}.tftpl"
+          if length(names) > 0 && try(contains(keys(local.file_contents), "${type}|${k}|query_file") && !endswith(local.file_paths["${type}|${k}|query_file"], ".tftpl"), false)
+        ],
       )
     ]
   ])
@@ -574,6 +605,81 @@ locals {
       if length(distinct([for i in items : i.id])) > 1
     ],
   )
+
+  # ---------------------------------------------------------------------------
+  # Table schemas, inline or from schema_file
+  #
+  # Editors do not check schema files, and the provider drops field keys it
+  # does not know, so a typo such as "mdoe" would silently create a NULLABLE
+  # column. Every field is checked, five levels deep (BigQuery allows fifteen);
+  # unknown keys are reported through mapping_checks.
+  # ---------------------------------------------------------------------------
+
+  schema_field_types = local.schema.definitions.schema_field.properties.type.anyOf[0].enum
+  schema_field_modes = local.schema.definitions.schema_field.properties.mode.anyOf[0].enum
+
+  # parent: the path of the list the field is in, for duplicate names.
+  schema_fields_1 = flatten([
+    for k, s in local.table_schemas : [
+      for i, f in try(concat(jsondecode(s), []), []) : {
+        parent = "${local.tables[k].path}.${contains(keys(local.table_schema_files), k) ? "schema_file" : "schema"}"
+        path   = "${local.tables[k].path}.${contains(keys(local.table_schema_files), k) ? "schema_file" : "schema"}[${i}]"
+        value  = f
+      }
+    ]
+    if s != null
+  ])
+  schema_fields_2 = flatten([for p in local.schema_fields_1 : [for i, f in try(concat(p.value.fields, []), []) : { parent = "${p.path}.fields", path = "${p.path}.fields[${i}]", value = f }]])
+  schema_fields_3 = flatten([for p in local.schema_fields_2 : [for i, f in try(concat(p.value.fields, []), []) : { parent = "${p.path}.fields", path = "${p.path}.fields[${i}]", value = f }]])
+  schema_fields_4 = flatten([for p in local.schema_fields_3 : [for i, f in try(concat(p.value.fields, []), []) : { parent = "${p.path}.fields", path = "${p.path}.fields[${i}]", value = f }]])
+  schema_fields_5 = flatten([for p in local.schema_fields_4 : [for i, f in try(concat(p.value.fields, []), []) : { parent = "${p.path}.fields", path = "${p.path}.fields[${i}]", value = f }]])
+  schema_fields   = concat(local.schema_fields_1, local.schema_fields_2, local.schema_fields_3, local.schema_fields_4, local.schema_fields_5)
+
+  # SQL spellings the API does not take as column types.
+  schema_type_aliases = { DECIMAL = "NUMERIC", BIGDECIMAL = "BIGNUMERIC" }
+
+  # Likely intended types for an unknown one: an alias, the same first three
+  # letters, or the same letters in another order.
+  schema_type_suggestions = {
+    for f in local.schema_fields : f.path => distinct(concat(
+      try([local.schema_type_aliases[upper(tostring(f.value.type))]], []),
+      [
+        for t in local.schema_field_types : t
+        if try(substr(t, 0, 3) == substr(upper(tostring(f.value.type)), 0, 3) || join("", sort(split("", t))) == join("", sort(split("", upper(tostring(f.value.type))))), false)
+      ],
+    ))
+    if can(tostring(f.value.type))
+  }
+
+  # Fields that are not mappings are reported by mapping_errors only.
+  schema_field_errors = flatten([
+    for f in local.schema_fields : concat(
+      try(tostring(f.value.name), null) != null ? [] : ["${f.path}.name: is required"],
+      try(tostring(f.value.type), null) == null ? ["${f.path}.type: is required"] :
+      try(contains(local.schema_field_types, upper(tostring(f.value.type))), false) ? [] : [
+        "${f.path}.type: \"${f.value.type}\" is not a BigQuery type${
+          length(local.schema_type_suggestions[f.path]) == 0 ? "" : " (did you mean ${join(" or ", local.schema_type_suggestions[f.path])}?)"
+        }"
+      ],
+      try(f.value.mode, null) == null || try(contains(local.schema_field_modes, upper(tostring(f.value.mode))), false) ? [] : [
+        "${f.path}.mode: \"${try(tostring(f.value.mode), "?")}\" must be NULLABLE, REQUIRED or REPEATED"
+      ],
+      contains(["RECORD", "STRUCT"], try(upper(tostring(f.value.type)), "")) && try(length(concat(f.value.fields, [])), 0) == 0 ? [
+        "${f.path}.fields: is required for ${try(upper(tostring(f.value.type)), "RECORD")} fields"
+      ] : [],
+    )
+    if can(keys(f.value))
+  ])
+
+  # BigQuery column names are case-insensitive.
+  schema_duplicate_column_errors = [
+    for id, names in {
+      for f in local.schema_fields : "${f.parent}|${lower(tostring(f.value.name))}" => tostring(f.value.name)...
+      if can(tostring(f.value.name))
+    } :
+    "${split("|", id)[0]}: column \"${names[0]}\" is defined ${length(names)} times (column names are case-insensitive)"
+    if length(names) > 1
+  ]
 
   # ---------------------------------------------------------------------------
   # Files referenced from the YAML
@@ -635,21 +741,8 @@ locals {
   # ---------------------------------------------------------------------------
 
   named_items = concat(
-    # Table schema fields, three levels deep (inline schemas and schema files).
-    flatten([
-      for k, s in local.table_schemas : [
-        for i, f in try(concat(jsondecode(s), []), []) : concat(
-          [{ path = "${local.tables[k].path}.schema[${i}].name", name = try(f.name, null) }],
-          flatten([
-            for j, g in try(concat(f.fields, []), []) : concat(
-              [{ path = "${local.tables[k].path}.schema[${i}].fields[${j}].name", name = try(g.name, null) }],
-              [for l, h in try(concat(g.fields, []), []) : { path = "${local.tables[k].path}.schema[${i}].fields[${j}].fields[${l}].name", name = try(h.name, null) }],
-            )
-          ]),
-        )
-      ]
-      if s != null
-    ]),
+    # Table schema fields (inline schemas and schema files).
+    [for f in local.schema_fields : { path = "${f.path}.name", name = try(f.value.name, null) }],
     # Routine arguments and table-type columns.
     flatten([
       for c in values(local.children.routines) : concat(
@@ -775,7 +868,10 @@ locals {
     local.authorization_errors,
     local.table_errors,
     local.query_errors,
+    local.query_content_errors,
     local.materialized_view_errors,
+    local.schema_field_errors,
+    local.schema_duplicate_column_errors,
     local.duplicate_table_errors,
     local.file_errors,
     local.routine_errors,

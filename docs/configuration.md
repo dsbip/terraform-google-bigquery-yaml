@@ -237,9 +237,24 @@ String references to views, routines and tables are resolved in this order:
 
 | Setting | File contents |
 |---|---|
-| `schema_file` | A table schema: a JSON or YAML list of fields |
-| `query_file` | View, materialized view or transfer SQL |
+| `schema_file` | A table schema: a JSON (or YAML) list of fields, or `{"fields": [...]}` ([tables.md](tables.md#from-a-json-file)) |
+| `query_file` | View, materialized view or transfer SQL ([views.md](views.md#sql-files)) |
 | `definition_file` | Routine body (SQL, JavaScript, ...) |
+
+A configuration that keeps schemas and SQL in files typically looks like this:
+
+```
+bigquery/
+├── config.yaml
+├── schemas/
+│   ├── customers.json        # tables.customers: schema_file: schemas/customers.json
+│   └── orders.json
+└── sql/
+    ├── revenue.sql.tftpl     # views.revenue: query_file: sql/revenue.sql.tftpl
+    └── daily_orders.sql.tftpl
+```
+
+Every example in [examples/](../examples) is laid out this way.
 
 Relative paths are resolved against the directory of `config_file`, or `base_path` when set (required when you use `config_yaml` and the files are not under `path.root`).
 

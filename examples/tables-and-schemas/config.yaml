@@ -40,11 +40,11 @@ tables:
     require_partition_filter: true
     clustering: [user_id, page]
 
-  # Schema from a YAML file. Ingestion-time partitioning (no field).
+  # Ingestion-time partitioning (no field).
   sessions:
     dataset: events
     description: Sessionised events, loaded hourly.
-    schema_file: schemas/sessions.yaml
+    schema_file: schemas/sessions.json
     time_partitioning:
       type: DAY
 
@@ -52,10 +52,7 @@ tables:
   customer_scores:
     dataset: events
     description: Daily propensity scores per customer.
-    schema:
-      - { name: customer_id, type: INT64, mode: REQUIRED }
-      - { name: score, type: FLOAT64 }
-      - { name: scored_at, type: DATE }
+    schema_file: schemas/customer_scores.json
     range_partitioning:
       field: customer_id
       range: { start: 0, end: 1000000, interval: 10000 }
@@ -64,20 +61,14 @@ tables:
   # uses them for join elimination).
   users:
     dataset: events
-    schema:
-      - { name: user_id, type: STRING, mode: REQUIRED }
-      - { name: signup_date, type: DATE }
+    schema_file: schemas/users.json
     table_constraints:
       primary_key:
         columns: [user_id]
 
   purchases:
     dataset: events
-    schema:
-      - { name: purchase_id, type: STRING, mode: REQUIRED }
-      - { name: user_id, type: STRING, mode: REQUIRED }
-      - { name: amount, type: NUMERIC, mode: REQUIRED }
-      - { name: purchased_at, type: TIMESTAMP }
+    schema_file: schemas/purchases.json
     table_constraints:
       primary_key:
         columns: [purchase_id]
@@ -93,17 +84,13 @@ tables:
     dataset: events
     description: Temporary table for a one-off backfill.
     expiration_time: 1893456000000 # 2030-01-01T00:00:00Z
-    schema:
-      - { name: payload, type: JSON }
+    schema_file: schemas/backfill_scratch.json
 
   # CSV files with an explicit schema. The module sends the schema to
   # external_data_configuration because no connection is used.
   daily_orders_csv:
     dataset: landing
-    schema:
-      - { name: order_id, type: STRING }
-      - { name: amount, type: NUMERIC }
-      - { name: order_date, type: DATE }
+    schema_file: schemas/daily_orders_csv.json
     external_data_configuration:
       source_format: CSV
       source_uris: ["gs://${landing_bucket}/orders/*.csv"]

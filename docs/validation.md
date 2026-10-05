@@ -46,7 +46,11 @@ While the configuration is invalid, the module gives every resource an empty `fo
 | transfers | `data_source_id`; at most one of `query`, `query_file`, `params.query`; scalar `params` values |
 | access and IAM entries | `role`; non-empty `members`; valid member formats; condition `expression` (and `title` for IAM conditions) |
 
-**Files:** every `schema_file`, `query_file` and `definition_file` is a string and exists. Schema files must hold a JSON or YAML list of fields.
+**Files:** every `schema_file`, `query_file` and `definition_file` is a string and exists. Schema files must hold a JSON or YAML list of fields, or `{"fields": [...]}`.
+
+**Schemas** (inline or from files, five levels deep): every field has a `name` and a valid `type`; `mode` is valid; only TableFieldSchema keys are used, with suggestions for typos; `RECORD` fields have `fields`; column names are unique, ignoring case. See [tables.md](tables.md#what-is-checked).
+
+**SQL of views and materialized views:** not empty; a `.sql` file that uses `${project_id}`, `${datasets...}` or a `template_vars` name must be a `.tftpl` file instead. See [views.md](views.md#sql-files).
 
 **References**
 

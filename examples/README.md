@@ -1,6 +1,6 @@
 # Examples
 
-Each directory is a runnable Terraform root module: a `main.tf` that calls the module and a commented `config.yaml` (plus SQL, JavaScript or schema files where needed). In every `config.yaml`, datasets, tables, views, materialized views and routines are separate top-level sections, and each table, view or routine names its dataset with `dataset:`.
+Each directory is a runnable Terraform root module: a `main.tf` that calls the module and a commented `config.yaml` (plus SQL, JavaScript or schema files where needed). In every `config.yaml`, datasets, tables, views, materialized views and routines are separate top-level sections, and each table, view or routine names its dataset with `dataset:`. Table schemas are JSON files in `schemas/` (`schema_file`), and the SQL of views and materialized views is in `sql/` (`query_file`).
 
 | Example | Scenario | Resources |
 |---|---|---|

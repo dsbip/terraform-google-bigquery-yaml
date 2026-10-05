@@ -1,0 +1,6 @@
+{
+  "fields": [
+    { "name": "customer_id", "type": "STRING", "mode": "REQUIRED" },
+    { "name": "email", "type": "STRING", "policyTags": { "names": ["projects/p/locations/eu/taxonomies/1/policyTags/2"] } }
+  ]
+}

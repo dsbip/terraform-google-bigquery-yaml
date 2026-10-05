@@ -1,0 +1,33 @@
+# Tables take their schema from JSON files and views their SQL from SQL files,
+# all relative to this file. Used by tests/files.tftest.hcl.
+datasets:
+  sales:
+    dataset_id: sales_${env}
+  reporting: {}
+
+tables:
+  orders:
+    dataset: sales
+    schema_file: schemas/orders.json # a list of fields, as from bq show --schema
+  customers:
+    dataset: sales
+    schema_file: schemas/customers.json # {"fields": [...]}, as in the BigQuery API
+  events:
+    dataset: sales
+    schema_file: schemas/events.json.tftpl # rendered with template_vars
+  products:
+    dataset: sales
+    schema_file: schemas/products.yaml # YAML works too
+
+views:
+  revenue:
+    dataset: reporting
+    query_file: sql/revenue.sql.tftpl # rendered: project and dataset IDs
+  constant:
+    dataset: reporting
+    query_file: sql/constant.sql # used as written
+
+materialized_views:
+  daily_orders:
+    dataset: sales
+    query_file: sql/daily_orders.sql.tftpl

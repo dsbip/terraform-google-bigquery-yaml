@@ -58,7 +58,39 @@ tables:
 
 A schema is a list of BigQuery fields, in the format used by the BigQuery API and `bq show --schema`. Field keys are camelCase (`policyTags`, `defaultValueExpression`, `maxLength`, ...).
 
-Inline:
+### From a JSON file
+
+Keep each table's schema in its own JSON file and reference it with `schema_file`. The path is relative to the configuration file:
+
+```yaml
+tables:
+  orders:
+    dataset: sales
+    schema_file: schemas/orders.json
+```
+
+```json
+[
+  { "name": "order_id", "type": "STRING", "mode": "REQUIRED", "description": "Primary key" },
+  { "name": "amount", "type": "NUMERIC", "precision": "12", "scale": "2" },
+  {
+    "name": "items",
+    "type": "RECORD",
+    "mode": "REPEATED",
+    "fields": [
+      { "name": "sku", "type": "STRING" },
+      { "name": "quantity", "type": "INT64" }
+    ]
+  }
+]
+```
+
+`bq show --schema --format=prettyjson my-project:sales.orders > schemas/orders.json` writes this format for an existing table. A file may also contain a TableSchema object, `{"fields": [...]}`, as the BigQuery API returns it.
+
+- A file name ending in `.json.tftpl` is rendered first, with `${project_id}`, `${datasets.<key>}` and `template_vars` (for example to put the environment in descriptions).
+- A `.yaml` or `.yml` file is read as YAML, with the same fields.
+
+### Inline
 
 ```yaml
 schema:
@@ -72,17 +104,28 @@ schema:
       - { name: quantity, type: INT64 }
 ```
 
-From a file (relative to the configuration file):
+or as a JSON string: `schema: '[{"name":"id","type":"STRING"}]'`. `schema` and `schema_file` are mutually exclusive.
 
-```yaml
-schema_file: schemas/orders.json    # or .yaml / .yml
+### What is checked
+
+Editors do not check schema files, and the provider silently drops field keys it does not know, so the module checks every field during plan, inline or from a file, five levels deep:
+
+- `name` and `type` are present;
+- `type` is a BigQuery type (`STRING`, `INT64`, `RECORD`, ...) and `mode` is `NULLABLE`, `REQUIRED` or `REPEATED` (case-insensitive), with suggestions for typos;
+- every key is a TableFieldSchema key (`name`, `type`, `mode`, `description`, `fields`, `policyTags`, `maxLength`, `precision`, `scale`, `roundingMode`, `collation`, `defaultValueExpression`, `rangeElementType`, `dataPolicies`, `foreignTypeDefinition`, `timestampPrecision`), with suggestions;
+- `RECORD` / `STRUCT` fields have `fields`;
+- column names are unique within a record, ignoring case, as in BigQuery.
+
+Problems point into the file by position, for example:
+
 ```
-
-As a JSON string: `schema: '[{"name":"id","type":"STRING"}]'`.
+tables.orders.schema_file[2]: unknown key "mdoe" (did you mean mode?)
+tables.orders.schema_file[3].fields[0].type: "STRNG" is not a BigQuery type (did you mean STRING or STRUCT?)
+```
 
 Notes:
 
-- The provider compares schemas as JSON. Write types the way BigQuery returns them to avoid diffs after apply: `RECORD` rather than `STRUCT`, `NUMERIC` rather than `DECIMAL`. `INTEGER`/`INT64`, `FLOAT`/`FLOAT64` and `BOOLEAN`/`BOOL` are treated as equal.
+- The provider compares schemas as JSON. Write types the way BigQuery returns them to avoid diffs after apply: `RECORD` rather than `STRUCT`. `INTEGER`/`INT64`, `FLOAT`/`FLOAT64` and `BOOLEAN`/`BOOL` are treated as equal. The SQL names `DECIMAL` and `BIGDECIMAL` are not column types in a schema; validation suggests `NUMERIC` and `BIGNUMERIC`.
 - Write integer attributes (`maxLength`, `precision`, `scale`) as quoted strings. The API returns them as strings.
 - Quote column names that YAML would read as booleans: `name: "on"`, `name: "y"`. Validation reports them otherwise ([troubleshooting](troubleshooting.md#yaml-booleans)).
 - Some schema changes make the provider **replace the table, losing its data**. These are: changing a column's type, changing a mode other than `REQUIRED` → `NULLABLE`, adding a `REQUIRED` column, dropping a nested field, or dropping and adding columns in the same change. In-place changes are: adding `NULLABLE`/`REPEATED` columns, relaxing `REQUIRED` to `NULLABLE`, dropping top-level columns (unless the table has row access policies), and changing descriptions or policy tags. Check the plan for `must be replaced` before applying schema changes.

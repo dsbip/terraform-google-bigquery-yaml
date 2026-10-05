@@ -305,7 +305,7 @@ run "table_rules" {
     condition = toset(local.validation_errors) == toset([
       "tables.both_schemas: set schema or schema_file, not both",
       "tables.missing_file.schema_file: file not found: tests/fixtures/schemas/nope.json",
-      "tables.broken_file.schema_file: tests/fixtures/schemas/broken.json is not a JSON or YAML list of fields",
+      "tables.broken_file.schema_file: tests/fixtures/schemas/broken.json is not a list of fields, or {\"fields\": [...]}, in JSON or YAML",
       "tables.bad_schema.schema: must be a list of fields or a JSON string",
       "tables.both_partitionings: set time_partitioning or range_partitioning, not both",
       "tables.incomplete_range.range_partitioning: field and range.start, range.end, range.interval are required",
@@ -754,6 +754,89 @@ run "duplicate_keys_with_windows_line_endings" {
   assert {
     condition = toset(local.validation_errors) == toset([
       "datasets.a: defined on lines 2 and 3; YAML keeps only the last one. Keys must be unique within datasets; rename the others (dataset_id sets the BigQuery ID independently of the key)",
+    ])
+    error_message = "Unexpected messages: ${jsonencode(local.validation_errors)}"
+  }
+}
+
+run "schema_field_rules" {
+  command = plan
+
+  variables {
+    config_yaml = <<-EOT
+      datasets:
+        d: {}
+      tables:
+        inline:
+          dataset: d
+          schema:
+            - { name: id, type: STRNG }
+            - { name: amount, tpye: NUMERIC }
+            - { type: STRING }
+            - { name: Id, type: int64, mode: OPTIONAL }
+            - { name: address, type: RECORD }
+            - name: items
+              type: RECORD
+              mode: repeated
+              fields:
+                - { name: sku, type: STRING, mdoe: REQUIRED }
+                - { name: SKU, type: STRING }
+            - { name: price, type: DECIMAL }
+            - { name: big, type: bigdecimal }
+        from_file:
+          dataset: d
+          schema_file: schemas/typos.json
+    EOT
+  }
+
+  expect_failures = [terraform_data.validation]
+
+  assert {
+    condition = toset(local.validation_errors) == toset([
+      "tables.inline.schema[0].type: \"STRNG\" is not a BigQuery type (did you mean STRING or STRUCT?)",
+      "tables.inline.schema[1]: unknown key \"tpye\" (did you mean type?)",
+      "tables.inline.schema[1].type: is required",
+      "tables.inline.schema[2].name: is required",
+      "tables.inline.schema[3].mode: \"OPTIONAL\" must be NULLABLE, REQUIRED or REPEATED",
+      "tables.inline.schema: column \"id\" is defined 2 times (column names are case-insensitive)",
+      "tables.inline.schema[4].fields: is required for RECORD fields",
+      "tables.inline.schema[5].fields[0]: unknown key \"mdoe\" (did you mean mode?)",
+      "tables.inline.schema[5].fields: column \"sku\" is defined 2 times (column names are case-insensitive)",
+      "tables.inline.schema[6].type: \"DECIMAL\" is not a BigQuery type (did you mean NUMERIC?)",
+      "tables.inline.schema[7].type: \"bigdecimal\" is not a BigQuery type (did you mean BIGNUMERIC?)",
+      "tables.from_file.schema_file[1].fields[0].fields[0].fields[0].fields[0].type: \"BOOLEN\" is not a BigQuery type (did you mean BOOLEAN or BOOL?)",
+      "tables.from_file.schema_file[2]: must be a mapping (key: value pairs)",
+    ])
+    error_message = "Unexpected messages: ${jsonencode(local.validation_errors)}"
+  }
+}
+
+run "query_rules_for_sql" {
+  command = plan
+
+  variables {
+    template_vars = { env = "qa" }
+    config_yaml   = <<-EOT
+      datasets:
+        d: {}
+      views:
+        empty_file: { dataset: d, query_file: sql/empty.sql }
+        empty_inline: { dataset: d, query: "  " }
+        unrendered: { dataset: d, query_file: sql/needs_rendering.sql }
+        literal: { dataset: d, query_file: sql/static.sql } # $${not_rendered} is not a module variable
+      materialized_views:
+        mv_unrendered: { dataset: d, query_file: sql/needs_rendering.sql }
+    EOT
+  }
+
+  expect_failures = [terraform_data.validation]
+
+  assert {
+    condition = toset(local.validation_errors) == toset([
+      "views.empty_file.query_file: tests/fixtures/sql/empty.sql is empty",
+      "views.empty_inline.query: is empty",
+      "views.unrendered.query_file: tests/fixtures/sql/needs_rendering.sql uses $${project_id}, $${datasets}, $${env}, but only files ending in .tftpl are rendered; rename it to tests/fixtures/sql/needs_rendering.sql.tftpl",
+      "materialized_views.mv_unrendered.query_file: tests/fixtures/sql/needs_rendering.sql uses $${project_id}, $${datasets}, $${env}, but only files ending in .tftpl are rendered; rename it to tests/fixtures/sql/needs_rendering.sql.tftpl",
     ])
     error_message = "Unexpected messages: ${jsonencode(local.validation_errors)}"
   }

@@ -30,15 +30,27 @@ locals {
   # Table key alone ("orders") => "<dataset key>.<table key>", for references.
   table_addresses_by_key = { for k, c in local.children.tables : c.key => k }
 
-  # Schema JSON from schema_file (JSON or YAML) or from an inline schema (a list
-  # of fields or a JSON string).
+  # Decoded schema files (JSON, or YAML for *.yaml / *.yml), null when unreadable.
+  table_schema_files = {
+    for k, m in local.tables_merged : k => (
+      can(regex("(?i)\\.ya?ml(\\.tftpl)?$", local.file_paths["tables|${k}|schema_file"]))
+      ? try(yamldecode(local.file_contents["tables|${k}|schema_file"]), null)
+      : try(jsondecode(local.file_contents["tables|${k}|schema_file"]), null)
+    )
+    if contains(keys(local.file_contents), "tables|${k}|schema_file")
+  }
+
+  # Schema JSON from schema_file or from an inline schema (a list of fields or a
+  # JSON string). A file holds a list of fields (`bq show --schema`) or a
+  # TableSchema object, {"fields": [...]}, as in the BigQuery API.
   table_schema_candidates = {
     for k, m in local.tables_merged : k => (
-      contains(keys(local.file_contents), "tables|${k}|schema_file")
-      ? (
-        can(regex("(?i)\\.ya?ml(\\.tftpl)?$", local.file_paths["tables|${k}|schema_file"]))
-        ? try(jsonencode(yamldecode(local.file_contents["tables|${k}|schema_file"])), null)
-        : try(jsonencode(jsondecode(local.file_contents["tables|${k}|schema_file"])), null)
+      contains(keys(local.table_schema_files), k)
+      ? try(
+        can(concat(local.table_schema_files[k], []))
+        ? jsonencode(local.table_schema_files[k])
+        : try(jsonencode(local.table_schema_files[k].fields), null),
+        null
       )
       : try(can(tostring(m.schema)) ? tostring(m.schema) : jsonencode(m.schema), null)
     )

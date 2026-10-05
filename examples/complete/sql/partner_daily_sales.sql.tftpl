@@ -1,0 +1,4 @@
+SELECT order_date, country_code, COUNT(*) AS orders
+FROM `${project_id}.core.fct_orders`
+WHERE order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+GROUP BY order_date, country_code

@@ -74,10 +74,7 @@ tables:
   # metadata caching. With a connection the schema goes to the table.
   sales_biglake:
     dataset: lakehouse
-    schema:
-      - { name: sale_id, type: STRING }
-      - { name: amount, type: NUMERIC }
-      - { name: sold_at, type: TIMESTAMP }
+    schema_file: schemas/sales_biglake.json
     max_staleness: "0-0 0 4:0:0" # accept metadata up to 4 hours old
     external_data_configuration:
       source_format: PARQUET
@@ -97,10 +94,7 @@ tables:
   # BigLake managed table in Apache Iceberg format.
   events_iceberg:
     dataset: lakehouse
-    schema:
-      - { name: event_id, type: STRING }
-      - { name: payload, type: JSON }
-      - { name: event_time, type: TIMESTAMP }
+    schema_file: schemas/events_iceberg.json
     biglake_configuration:
       connection_id: lake
       storage_uri: gs://${lake_bucket}/iceberg/events/

@@ -1,11 +1,12 @@
 """The JSON Schema: is it valid, do the examples conform to it, and does it stay
 in sync with what the Terraform code expects?"""
 import copy
+import json
 
 import pytest
 from jsonschema import Draft7Validator
 
-from conftest import example_configs, load_yaml, referenced_definitions
+from conftest import EXAMPLES, example_configs, load_yaml, referenced_definitions
 
 
 def test_schema_is_valid_draft7(schema):
@@ -96,3 +97,34 @@ def test_child_sections_require_a_dataset(schema):
         assert "required" not in schema["definitions"][definition]
         assert list(schema["definitions"][definition]["properties"])[0] == "dataset"
         assert section not in schema["definitions"]["dataset"]["properties"]
+
+
+@pytest.mark.parametrize("path", example_configs(), ids=lambda p: p.parent.name + "/" + p.name)
+def test_examples_keep_schemas_and_sql_in_files(path):
+    """The examples show the recommended layout: table schemas in JSON files
+    (schema_file) and view SQL in SQL files (query_file)."""
+    doc = load_yaml(path)
+    for key, table in (doc.get("tables") or {}).items():
+        assert "schema" not in table, f"tables.{key}: use schema_file with a JSON file"
+        if "schema_file" in table:
+            assert table["schema_file"].endswith(".json"), f"tables.{key}: {table['schema_file']}"
+            assert (path.parent / table["schema_file"]).is_file(), table["schema_file"]
+    for section in ("views", "materialized_views"):
+        for key, view in (doc.get(section) or {}).items():
+            assert "query" not in view, f"{section}.{key}: use query_file with a SQL file"
+            assert view["query_file"].endswith((".sql", ".sql.tftpl")), f"{section}.{key}: {view['query_file']}"
+            assert (path.parent / view["query_file"]).is_file(), view["query_file"]
+
+
+def example_schema_files():
+    return sorted(EXAMPLES.glob("*/schemas/*.json"))
+
+
+@pytest.mark.parametrize("path", example_schema_files(), ids=lambda p: p.parent.parent.name + "/" + p.name)
+def test_example_schema_files_conform(schema, path):
+    """Schema files are checked against the same field definition as inline
+    schemas: required name and type, known keys, valid types and modes."""
+    validator = Draft7Validator({"$ref": "#/definitions/schema", "definitions": schema["definitions"]})
+    with open(path, encoding="utf-8") as fh:
+        errors = list(validator.iter_errors(json.load(fh)))
+    assert not errors, [f"{'/'.join(map(str, e.path))}: {e.message}" for e in errors]

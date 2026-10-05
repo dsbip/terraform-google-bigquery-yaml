@@ -54,40 +54,22 @@ datasets:
 tables:
   employees:
     dataset: hr_private
-    schema:
-      - { name: employee_id, type: STRING, mode: REQUIRED }
-      - { name: full_name, type: STRING }
-      - { name: email, type: STRING }
-      - { name: department, type: STRING }
-      - { name: manager_id, type: STRING }
-      - { name: salary, type: NUMERIC, description: Annual gross salary }
-      - { name: national_id, type: STRING, description: Sensitive }
-      - { name: hired_on, type: DATE }
+    schema_file: schemas/employees.json
 
 views:
   employee_directory:
     dataset: hr_shared
     description: Names, emails and departments only.
-    query: |
-      SELECT employee_id, full_name, email, department, manager_id
-      FROM `${project_id}.hr_private.employees`
+    query_file: sql/employee_directory.sql.tftpl
 
   headcount_by_department:
     dataset: hr_shared
     description: Aggregated headcount; no individual rows.
-    query: |
-      SELECT department, COUNT(*) AS headcount
-      FROM `${project_id}.hr_private.employees`
-      GROUP BY department
+    query_file: sql/headcount_by_department.sql.tftpl
 
   tenure_distribution:
     dataset: hr_analytics
-    query: |
-      SELECT department,
-             DATE_DIFF(CURRENT_DATE(), hired_on, YEAR) AS tenure_years,
-             COUNT(*) AS employees
-      FROM `${project_id}.hr_private.employees`
-      GROUP BY department, tenure_years
+    query_file: sql/tenure_distribution.sql.tftpl
 
 routines:
   employees_in_department:

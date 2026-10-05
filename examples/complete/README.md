@@ -39,6 +39,7 @@ The files that make it up:
 | File | Contents |
 |---|---|
 | `config.yaml` | The configuration |
-| `schemas/raw_orders.json`, `schemas/fct_orders.yaml` | Table schemas |
+| `schemas/*.json` | Table schemas, one file per table (`schema_file`) |
+| `sql/customer_360.sql.tftpl`, `sql/sales_by_country.sql.tftpl`, `sql/partner_daily_sales.sql.tftpl` | View SQL (`query_file`) |
+| `sql/mv_daily_sales.sql.tftpl` | Materialized view SQL |
 | `sql/rebuild_dim_customer.sql.tftpl` | Procedure body |
-| `sql/customer_360.sql.tftpl` | View query |

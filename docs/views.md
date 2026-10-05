@@ -102,6 +102,30 @@ module "marts" {
 
 The second file declares datasets from the first with `create: false` when its views or authorizations need them. See the [layered-views example](../examples/layered-views).
 
+## SQL files
+
+Keep each view's SQL in its own file and reference it with `query_file`, relative to the configuration file. Materialized views work the same way:
+
+```yaml
+views:
+  revenue_by_country:
+    dataset: reporting
+    query_file: sql/revenue_by_country.sql.tftpl
+```
+
+```sql
+-- sql/revenue_by_country.sql.tftpl
+SELECT c.country, SUM(o.amount) AS revenue
+FROM `${project_id}.${datasets.sales}.orders` AS o
+JOIN `${project_id}.${datasets.sales}.customers` AS c USING (customer_id)
+GROUP BY c.country
+```
+
+- **`.sql.tftpl`** files are rendered with `templatefile()`: `${project_id}`, `${datasets.<key>}` (the dataset's real ID, which follows `dataset_id` overrides) and every `template_vars` entry are available. Write `$${` for a literal `${`.
+- **`.sql`** files are sent to BigQuery exactly as written.
+- The plan fails if a `.sql` file uses `${project_id}`, `${datasets...}` or a `template_vars` name, which only a `.tftpl` file would have replaced; rename the file to `.sql.tftpl`. Other `${...}` text, for example in a string literal, is left alone.
+- The plan also fails for an empty file or an empty `query`.
+
 ## SQL tips
 
 - Refer to tables with fully qualified names (`` `project.dataset.table` ``). With templating, write `` `${project_id}.sales.orders` `` in the YAML, or `` `${project_id}.${datasets.sales}.orders` `` in a `.tftpl` file so dataset ID overrides are followed.

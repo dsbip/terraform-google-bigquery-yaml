@@ -5,9 +5,10 @@
 # Datasets, tables and views are separate sections. A table or view is not
 # indented under its dataset; it names it with `dataset: <key>`.
 #
-# The project comes from the module's project_id variable (see main.tf). The
-# module renders this file with templatefile() before parsing it, so the
-# project_id placeholder in the view SQL below becomes that project.
+# Each table takes its schema from a JSON file in schemas/, and the view takes
+# its SQL from sql/revenue_by_country.sql.tftpl (paths are relative to this
+# file). Files ending in .tftpl are rendered, so the project_id placeholder in
+# the SQL becomes the project from the module's project_id variable (main.tf).
 
 defaults:
   location: US
@@ -32,20 +33,12 @@ tables:
   customers:
     dataset: sales
     description: One row per customer.
-    schema:
-      - { name: customer_id, type: STRING, mode: REQUIRED, description: Primary key }
-      - { name: email, type: STRING }
-      - { name: country, type: STRING }
-      - { name: created_at, type: TIMESTAMP, mode: REQUIRED }
+    schema_file: schemas/customers.json
 
   orders:
     dataset: sales
     description: One row per order, partitioned by order date.
-    schema:
-      - { name: order_id, type: STRING, mode: REQUIRED }
-      - { name: customer_id, type: STRING, mode: REQUIRED }
-      - { name: amount, type: NUMERIC }
-      - { name: ordered_at, type: TIMESTAMP, mode: REQUIRED }
+    schema_file: schemas/orders.json
     time_partitioning:
       type: DAY
       field: ordered_at
@@ -55,8 +48,4 @@ views:
   revenue_by_country:
     dataset: sales
     description: Revenue per customer country.
-    query: |
-      SELECT c.country, SUM(o.amount) AS revenue
-      FROM `${project_id}.sales.orders` AS o
-      JOIN `${project_id}.sales.customers` AS c USING (customer_id)
-      GROUP BY c.country
+    query_file: sql/revenue_by_country.sql.tftpl
