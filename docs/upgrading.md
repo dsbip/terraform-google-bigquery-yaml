@@ -40,7 +40,7 @@ views:
 
 ## Steps
 
-1. **Update the module version** to `ref=v2.0.0` and run `terraform init -upgrade`. If your YAML files start with a schema line, point it at v2.0.0 too:
+1. **Update the module version** to `ref=v2.0.0` and run `terraform init -upgrade`. If you keep a copy of the module in your own repository (`source = "../../modules/bigquery"`), replace the whole directory: every `*.tf` file **and** `schemas/bigquery-config.schema.json`, which the module reads its allowed keys from. A v2 `.tf` file next to a v1 schema file fails the plan with a message about the schema file ([troubleshooting](troubleshooting.md#plan-errors)). If your YAML files start with a schema line, point it at v2.0.0 too:
 
    ```yaml
    # yaml-language-server: $schema=https://raw.githubusercontent.com/dsbip/terraform-google-bigquery-yaml/v2.0.0/schemas/bigquery-config.schema.json

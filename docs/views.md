@@ -123,6 +123,7 @@ GROUP BY c.country
 
 - **`.sql.tftpl`** files are rendered with `templatefile()`: `${project_id}`, `${datasets.<key>}` (the dataset's real ID, which follows `dataset_id` overrides) and every `template_vars` entry are available. Write `$${` for a literal `${`.
 - **`.sql`** files are sent to BigQuery exactly as written.
+- The file holds **only the query** (`SELECT ...` or `WITH ...`), not a `CREATE OR REPLACE VIEW ... AS` statement. The module creates the view through the BigQuery API from the YAML (the dataset, the key or `table_id`, `description`, `labels`), and BigQuery takes only the query. If you are moving DDL files over, delete everything up to and including `AS`. A file that starts with `CREATE` fails the plan. Comments and a `#standardSQL` line before the query are fine.
 - The plan fails if a `.sql` file uses `${project_id}`, `${datasets...}` or a `template_vars` name, which only a `.tftpl` file would have replaced; rename the file to `.sql.tftpl`. Other `${...}` text, for example in a string literal, is left alone.
 - The plan also fails for an empty file or an empty `query`.
 

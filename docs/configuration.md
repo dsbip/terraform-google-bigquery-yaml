@@ -198,6 +198,8 @@ Tables and materialized views keep the provider default `deletion_protection: tr
 | transfers | `location` → the destination dataset's location (when the dataset is in this file) → `defaults.transfers.location` → `defaults.location` → provider default (US) |
 | tables, views, routines | their dataset's location |
 
+A location is a region (`europe-west2`, `us-central1`), a multi-region (`US`, `EU`) or a BigQuery Omni location (`aws-us-east-1`, `azure-eastus2`). Validation rejects anything else, such as `europe-wetst`, because BigQuery would only reject it during apply. Only the shape is checked, so new regions work without a module update.
+
 ## Labels
 
 Datasets, tables, views and materialized views get labels merged from, lowest to highest priority:
@@ -208,6 +210,8 @@ Datasets, tables, views and materialized views get labels merged from, lowest to
 4. the resource's own `labels`
 
 Tables do not inherit their dataset's labels. Numbers and booleans are converted to strings.
+
+Keys and values may contain only lowercase letters (international letters too), digits, underscores and dashes, up to 63 characters; keys start with a letter, and a resource has at most 64 labels. Validation checks every label source, including the module's `labels` variable, because BigQuery would reject them only during apply.
 
 ## Empty values
 
@@ -239,7 +243,7 @@ String references to views, routines and tables are resolved in this order:
 |---|---|
 | `schema_file` | A table schema: a JSON (or YAML) list of fields, or `{"fields": [...]}` ([tables.md](tables.md#from-a-json-file)) |
 | `query_file` | View, materialized view or transfer SQL ([views.md](views.md#sql-files)) |
-| `definition_file` | Routine body (SQL, JavaScript, ...) |
+| `definition_file` | Routine body: `.sql`, `.sql.tftpl`, `.js` or `.py` ([routines.md](routines.md#bodies-in-files)) |
 
 A configuration that keeps schemas and SQL in files typically looks like this:
 
@@ -249,9 +253,12 @@ bigquery/
 ├── schemas/
 │   ├── customers.json        # tables.customers: schema_file: schemas/customers.json
 │   └── orders.json
-└── sql/
-    ├── revenue.sql.tftpl     # views.revenue: query_file: sql/revenue.sql.tftpl
-    └── daily_orders.sql.tftpl
+├── sql/
+│   ├── revenue.sql.tftpl     # views.revenue: query_file: sql/revenue.sql.tftpl
+│   └── daily_orders.sql.tftpl
+└── routines/
+    ├── normalize_email.sql   # routines.normalize_email: definition_file: routines/normalize_email.sql
+    └── title_case.js
 ```
 
 Every example in [examples/](../examples) is laid out this way.

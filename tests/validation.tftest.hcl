@@ -841,3 +841,170 @@ run "query_rules_for_sql" {
     error_message = "Unexpected messages: ${jsonencode(local.validation_errors)}"
   }
 }
+
+run "routine_body_rules" {
+  command = plan
+
+  variables {
+    template_vars = { env = "qa" }
+    config_yaml   = <<-EOT
+      datasets:
+        d: {}
+      routines:
+        empty_file: { dataset: d, definition_file: sql/empty.sql }
+        empty_inline: { dataset: d, definition_body: "  " }
+        js_without_language: { dataset: d, definition_file: js/greet.js }
+        sql_as_javascript: { dataset: d, language: JAVASCRIPT, return_type: STRING, definition_file: sql/procedure.sql }
+        unrendered: { dataset: d, routine_type: PROCEDURE, definition_file: sql/needs_rendering.sql }
+        js_template_literal: { dataset: d, language: javascript, return_type: STRING, definition_file: js/project_label.js }
+        remote:
+          dataset: d
+          return_type: STRING
+          remote_function_options: { endpoint: "https://example.com", connection: p.us.c }
+    EOT
+  }
+
+  expect_failures = [terraform_data.validation]
+
+  assert {
+    condition = toset(local.validation_errors) == toset([
+      "routines.empty_file.definition_file: tests/fixtures/sql/empty.sql is empty",
+      "routines.empty_inline.definition_body: is empty",
+      "routines.js_without_language.definition_file: tests/fixtures/js/greet.js is a JAVASCRIPT file, but the routine's language is SQL (the default); set language: JAVASCRIPT",
+      "routines.sql_as_javascript.definition_file: tests/fixtures/sql/procedure.sql is a SQL file, but the routine's language is JAVASCRIPT; set language: SQL",
+      "routines.unrendered.definition_file: tests/fixtures/sql/needs_rendering.sql uses $${project_id}, $${datasets}, $${env}, but only files ending in .tftpl are rendered; rename it to tests/fixtures/sql/needs_rendering.sql.tftpl",
+    ])
+    error_message = "Unexpected messages: ${jsonencode(local.validation_errors)}"
+  }
+}
+
+run "policy_tags_ranges_javascript_and_transfer_sql" {
+  command = plan
+
+  variables {
+    template_vars = { env = "qa" }
+    config_yaml   = <<-EOT
+      datasets:
+        d: { location: US }
+      tables:
+        t:
+          dataset: d
+          schema:
+            - { name: ssn, type: STRING, policyTags: { name: [projects/p/locations/us/taxonomies/1/policyTags/2] } }
+            - { name: tags, type: STRING, policyTags: { names: projects/p/locations/us/taxonomies/1/policyTags/2 } }
+            - { name: p1, type: RANGE }
+            - { name: p2, type: RANGE, rangeElementType: { type: INT64 } }
+            - { name: p3, type: range, rangeElementType: { type: date } }
+      routines:
+        js_no_return: { dataset: d, language: JAVASCRIPT, definition_file: js/greet.js }
+      transfers:
+        empty_file: { data_source_id: scheduled_query, destination_dataset_id: d, query_file: sql/empty.sql }
+        unrendered: { data_source_id: scheduled_query, destination_dataset_id: d, query_file: sql/needs_rendering.sql }
+        empty_inline: { data_source_id: scheduled_query, destination_dataset_id: d, query: " " }
+    EOT
+  }
+
+  expect_failures = [terraform_data.validation]
+
+  assert {
+    condition = toset(local.validation_errors) == toset([
+      "tables.t.schema[0].policyTags: unknown key \"name\" (did you mean names?)",
+      "tables.t.schema[1].policyTags.names: must be a list",
+      "tables.t.schema[2].rangeElementType: is required for RANGE fields, e.g. {\"type\": \"DATE\"}",
+      "tables.t.schema[3].rangeElementType.type: \"INT64\" must be DATE, DATETIME or TIMESTAMP",
+      "routines.js_no_return.return_type: is required for JavaScript functions",
+      "transfers.empty_file.query_file: tests/fixtures/sql/empty.sql is empty",
+      "transfers.unrendered.query_file: tests/fixtures/sql/needs_rendering.sql uses $${project_id}, $${datasets}, $${env}, but only files ending in .tftpl are rendered; rename it to tests/fixtures/sql/needs_rendering.sql.tftpl",
+      "transfers.empty_inline.query: is empty",
+    ])
+    error_message = "Unexpected messages: ${jsonencode(local.validation_errors)}"
+  }
+}
+
+run "labels_and_locations" {
+  command = plan
+
+  variables {
+    labels      = { managed_by = "Terraform" }
+    config_yaml = <<-EOT
+      defaults:
+        location: europe-wetst
+        labels:
+          team: GSS
+          Owner: data
+          cfu: digital_data_and_ai
+        connections:
+          location: aws-us-east-1
+      datasets:
+        a:
+          location: eu
+          labels:
+            1st: x
+            straße: grün
+        b:
+          location: europe-west2
+      tables:
+        t:
+          dataset: a
+          labels: { tier: Gold Plated }
+      connections:
+        c: { cloud_resource: {}, location: azure-eastus2 }
+      transfers:
+        x: { data_source_id: scheduled_query, query: SELECT 1, location: us-cental }
+    EOT
+  }
+
+  expect_failures = [terraform_data.validation]
+
+  assert {
+    condition = toset(local.validation_errors) == toset([
+      "var.labels.managed_by: label value \"Terraform\" may contain only lowercase letters, digits, underscores and dashes (63 characters at most); use \"terraform\"",
+      "defaults.labels.team: label value \"GSS\" may contain only lowercase letters, digits, underscores and dashes (63 characters at most); use \"gss\"",
+      "defaults.labels: label key \"Owner\" must start with a lowercase letter and contain only lowercase letters, digits, underscores and dashes (63 characters at most)",
+      "datasets.a.labels: label key \"1st\" must start with a lowercase letter and contain only lowercase letters, digits, underscores and dashes (63 characters at most)",
+      "tables.t.labels.tier: label value \"Gold Plated\" may contain only lowercase letters, digits, underscores and dashes (63 characters at most)",
+      "defaults.location: \"europe-wetst\" is not a BigQuery location; use a region such as europe-west2, a multi-region (US or EU), or a BigQuery Omni location (aws-..., azure-...)",
+      "transfers.x.location: \"us-cental\" is not a BigQuery location; use a region such as europe-west2, a multi-region (US or EU), or a BigQuery Omni location (aws-..., azure-...)",
+    ])
+    error_message = "Unexpected messages: ${jsonencode(local.validation_errors)}"
+  }
+}
+
+run "create_statements_in_view_and_routine_sql" {
+  command = plan
+
+  variables {
+    config_yaml = <<-EOT
+      datasets:
+        d: {}
+      views:
+        from_file: { dataset: d, query_file: sql/create_view.sql }
+        inline: { dataset: d, query: "create view d.v as select 1" }
+        directive: { dataset: d, query_file: sql/standard_sql.sql }
+      materialized_views:
+        mv: { dataset: d, query_file: sql/create_view.sql }
+      routines:
+        fn: { dataset: d, definition_file: sql/create_function.sql }
+        fn_inline: { dataset: d, routine_type: PROCEDURE, definition_body: "CREATE PROCEDURE d.p() BEGIN SELECT 1; END" }
+        js: { dataset: d, language: JAVASCRIPT, return_type: STRING, definition_body: "create(); return 'x';" }
+      transfers:
+        ddl:
+          data_source_id: scheduled_query
+          destination_dataset_id: d
+          query: CREATE OR REPLACE TABLE d.snapshot AS SELECT 1 AS x
+    EOT
+  }
+
+  expect_failures = [terraform_data.validation]
+
+  assert {
+    condition = toset(local.validation_errors) == toset([
+      "views.from_file.query_file: tests/fixtures/sql/create_view.sql starts with CREATE; keep only the query after AS (the module creates the view from the YAML: dataset, key or table_id, description, labels)",
+      "views.inline.query: starts with CREATE; keep only the query after AS (the module creates the view from the YAML: dataset, key or table_id, description, labels)",
+      "materialized_views.mv.query_file: tests/fixtures/sql/create_view.sql starts with CREATE; keep only the query after AS (the module creates the view from the YAML: dataset, key or table_id, description, labels)",
+      "routines.fn.definition_file: tests/fixtures/sql/create_function.sql starts with CREATE; keep only the body: the expression inside AS (...) for a function, the query for a table function, the BEGIN ... END block for a procedure (the module creates the routine from the YAML)",
+      "routines.fn_inline.definition_body: starts with CREATE; keep only the body: the expression inside AS (...) for a function, the query for a table function, the BEGIN ... END block for a procedure (the module creates the routine from the YAML)",
+    ])
+    error_message = "Unexpected messages: ${jsonencode(local.validation_errors)}"
+  }
+}

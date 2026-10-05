@@ -5,7 +5,7 @@ The module is tested in four layers. The first three need no Google Cloud access
 | Layer | Tool | What it proves | Where |
 |---|---|---|---|
 | Static | `terraform fmt`, `terraform validate` | Formatting; valid HCL against the provider schema | module root |
-| Unit | `terraform test` with a mocked provider | Every feature, default, precedence rule, reference resolution and validation message | `tests/*.tftest.hcl` (98 tests) |
+| Unit | `terraform test` with a mocked provider | Every feature, default, precedence rule, reference resolution and validation message | `tests/*.tftest.hcl` (103 tests) |
 | Plan | pytest + real provider, dummy credentials | Every example and the live fixture pass the real provider's validation and plan logic; examples match the JSON Schema; schema and module agree; docs cover every key; the v1 upgrade script keeps meaning and comments | `tests/python/test_example_plans.py`, `test_schema.py`, `test_docs.py`, `test_upgrade_script.py` |
 | Live | pytest + real provider, real project | Resources deploy, a second plan is empty (no drift), in-place updates work, destroy is clean | `tests/python/test_live.py`, `tests/integration/` |
 

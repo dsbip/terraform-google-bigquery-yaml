@@ -133,3 +133,46 @@ def test_live_fixture_plans_with_all_layers(terraform_bin, plan_env, repo_copy):
     )
     assert plan.returncode == 0, plan.stdout + plan.stderr
     assert "Plan: 30 to add, 0 to change, 0 to destroy." in plan.stdout
+
+
+def plan_errors(result):
+    """Error details from `terraform plan -json` output."""
+    details = []
+    for line in result.stdout.splitlines():
+        try:
+            message = json.loads(line)
+        except ValueError:
+            continue
+        if message.get("@level") == "error":
+            details.append(message.get("diagnostic", {}).get("detail", ""))
+    return "\n".join(details)
+
+
+def test_partial_copy_with_an_older_schema_is_reported(terraform_bin, plan_env, repo_copy):
+    """A copy of the module whose schema file is older than its .tf files
+    (e.g. new .tf files copied over an old vendored copy) must say so, instead
+    of reporting valid keys such as tables and dataset as unknown."""
+    cwd = repo_copy("examples/basic")
+    schema_path = cwd.parent.parent / "schemas" / "bigquery-config.schema.json"
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    # What a v1 schema file looks like to the v2 code.
+    del schema["x-schema-revision"]
+    for section in ("tables", "views", "materialized_views", "routines"):
+        del schema["properties"][section]
+    for definition in ("table", "view", "materialized_view", "routine"):
+        del schema["definitions"][definition]["properties"]["dataset"]
+    schema_path.write_text(json.dumps(schema), encoding="utf-8")
+
+    init = run([terraform_bin, "init", "-input=false", "-no-color", "-backend=false"], cwd, plan_env)
+    assert init.returncode == 0, init.stdout + init.stderr
+    plan = run(
+        [terraform_bin, "plan", "-refresh=false", "-input=false", "-lock=false", "-json", "-var", "project_id=example-project"],
+        cwd,
+        plan_env,
+    )
+    assert plan.returncode != 0
+    errors = plan_errors(plan)
+    assert "The BigQuery YAML configuration has 1 problem(s)" in errors, errors
+    assert "schemas/bigquery-config.schema.json is from an older version of the module than its .tf files (schema revision 1, expected 2)" in errors, errors
+    assert "Copy the whole module directory, schemas/ included" in errors, errors
+    assert "unknown key" not in errors, errors

@@ -1,6 +1,7 @@
 # Files referenced from the YAML: tables take their schema from JSON (or YAML)
 # files with schema_file, views and materialized views their SQL from SQL files
-# with query_file. Paths are relative to the configuration file.
+# with query_file, and routines their body with definition_file. Paths are
+# relative to the configuration file.
 
 mock_provider "google" {}
 
@@ -64,6 +65,33 @@ run "views_take_their_sql_from_files" {
   assert {
     condition     = google_bigquery_table.view["reporting.revenue"].view[0].use_legacy_sql == false
     error_message = "Views from files keep the view defaults."
+  }
+}
+
+run "routines_take_their_body_from_files" {
+  command = plan
+
+  assert {
+    condition     = google_bigquery_routine.this["sales.normalize_email"].definition_body == "LOWER(TRIM(email))\n"
+    error_message = "A .sql routine file should be used as written."
+  }
+  assert {
+    condition     = google_bigquery_routine.this["sales.orders_above"].definition_body == "SELECT order_id, amount\nFROM `test-project.sales_dev.orders`\nWHERE amount > min_amount\n"
+    error_message = "A .sql.tftpl routine file should be rendered: ${google_bigquery_routine.this["sales.orders_above"].definition_body}"
+  }
+  assert {
+    condition = (
+      google_bigquery_routine.this["sales.title_case"].definition_body == "return words.map(w => `$${w[0].toUpperCase()}$${w.slice(1)}`).join(\" \");\n" &&
+      google_bigquery_routine.this["sales.title_case"].language == "JAVASCRIPT"
+    )
+    error_message = "A .js file should be used as written, template literals included."
+  }
+  assert {
+    condition = (
+      google_bigquery_routine.this["sales.clean_orders"].routine_type == "PROCEDURE" &&
+      google_bigquery_routine.this["sales.clean_orders"].definition_body == "BEGIN\n  DELETE FROM `test-project.sales_dev.orders` WHERE amount IS NULL;\nEND\n"
+    )
+    error_message = "A procedure body should come from its file."
   }
 }
 

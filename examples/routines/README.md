@@ -1,15 +1,15 @@
 # Routines
 
-Every kind of routine in one `udfs` dataset:
+Every kind of routine in one `udfs` dataset. Each body is a file in `routines/`, referenced with `definition_file`: `.sql` for SQL, `.sql.tftpl` for SQL that uses `${project_id}`, `.js` for JavaScript.
 
 | Routine | Kind | Shows |
 |---|---|---|
 | `normalize_email` | SQL scalar function | Simple type names (`data_type: STRING`) |
 | `split_tags` | SQL scalar function | An `ARRAY<STRING>` return type as a mapping |
 | `order_summary` | SQL scalar function | A `STRUCT` return type |
-| `title_case` | JavaScript function | Body from `js/title_case.js` (JavaScript template literals stay untouched), `determinism_level` |
+| `title_case` | JavaScript function | Body from `routines/title_case.js` (JavaScript template literals stay untouched), `determinism_level` |
 | `orders_above` | Table-valued function | `return_table_type` columns |
-| `archive_cancelled_orders` | Procedure | `IN` and `OUT` arguments, body from a `.tftpl` template, routine IAM |
+| `archive_cancelled_orders` | Procedure | `IN` and `OUT` arguments, body from `routines/archive_cancelled_orders.sql.tftpl`, routine IAM |
 | `mask_email` | SQL function | `data_governance_type: DATA_MASKING` |
 | `detect_language` | Remote function | Calls a Cloud Run service through the `remote` connection, referenced by key |
 

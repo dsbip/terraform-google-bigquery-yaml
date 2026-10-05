@@ -75,6 +75,14 @@ tables:
 
 The check covers top-level sections and the entries of `datasets`, `tables`, `views`, `materialized_views`, `routines`, `connections` and `transfers` written in block style. Line numbers refer to the file after template rendering.
 
+### Labels
+
+BigQuery label keys and values may contain only **lowercase** letters (international letters too), digits, underscores and dashes, up to 63 characters, and keys start with a letter. `team: GSS` fails during apply, so the plan reports it, with the lowercase spelling when that is valid:
+
+```
+defaults.labels.team: label value "GSS" may contain only lowercase letters, digits, underscores and dashes (63 characters at most); use "gss"
+```
+
 ### Braces
 
 `{` and `}` start a mapping in *flow* style. A value that begins with `{`, or a value inside `[ ]` or `{ }`, must be quoted when it contains braces:
@@ -111,6 +119,10 @@ Comments are rendered too, and JavaScript template literals in the YAML need `$$
 ## Plan errors
 
 **`The BigQuery YAML configuration has N problem(s)`.** The configuration is invalid. Each line starts with the YAML path; see [validation.md](validation.md).
+
+**`.../schemas/bigquery-config.schema.json is from an older version of the module than its .tf files`.** The module directory is a mix of two versions, typically a copy of the module kept in your own repository (`source = "../../modules/bigquery"`) where new `.tf` files were copied over an old copy without its `schemas/` folder. The module reads the allowed keys from that file, so an old one would report valid keys such as `tables` and `dataset` as unknown. Replace the whole module directory with one version of the module: every `*.tf` file and `schemas/bigquery-config.schema.json` (`scripts/` is optional; `docs/`, `examples/` and `tests/` are not needed). Referencing the module from GitHub with `?ref=` avoids this.
+
+**`(root): unknown key "tables"` and `unknown key "dataset"` together.** The same mismatch with a module version from before this check existed: update the module directory as above.
 
 **`datasets.<key>.tables: tables are not nested in datasets`** (or `views`, `materialized_views`, `routines`). The file uses the v1 layout. Move each entry to the top-level section and add `dataset: <key>`; see [upgrading.md](upgrading.md).
 

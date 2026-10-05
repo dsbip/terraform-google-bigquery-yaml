@@ -161,7 +161,7 @@ routines:
     arguments:
       - { name: email, data_type: STRING }
     return_type: STRING
-    definition_body: LOWER(TRIM(email))
+    definition_file: routines/normalize_email.sql
 
   mask_email:
     dataset: udfs
@@ -170,7 +170,7 @@ routines:
     arguments:
       - { name: email, data_type: STRING }
     return_type: STRING
-    definition_body: REGEXP_REPLACE(email, r'^[^@]+', 'xxxxx')
+    definition_file: routines/mask_email.sql
 
   customer_orders:
     dataset: udfs
@@ -180,10 +180,7 @@ routines:
       - { name: customer, data_type: STRING }
       - { name: from_date, data_type: DATE }
       - { name: to_date, data_type: DATE }
-    definition_body: |
-      SELECT order_id, order_date, amount, status
-      FROM `${project_id}.core.fct_orders`
-      WHERE customer_id = customer AND order_date BETWEEN from_date AND to_date
+    definition_file: routines/customer_orders.sql.tftpl
     return_table_type:
       columns:
         - { name: order_id, type: STRING }
@@ -195,7 +192,7 @@ routines:
     dataset: udfs
     description: Rebuilds core.dim_customer from raw data.
     routine_type: PROCEDURE
-    definition_file: sql/rebuild_dim_customer.sql.tftpl
+    definition_file: routines/rebuild_dim_customer.sql.tftpl
 
   review_sentiment:
     dataset: udfs

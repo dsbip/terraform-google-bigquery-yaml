@@ -79,10 +79,7 @@ routines:
     language: SQL
     arguments:
       - { name: dept, data_type: STRING }
-    definition_body: |
-      SELECT employee_id, full_name, email
-      FROM `${project_id}.hr_private.employees`
-      WHERE department = dept
+    definition_file: routines/employees_in_department.sql.tftpl
     return_table_type:
       columns:
         - { name: employee_id, type: STRING }

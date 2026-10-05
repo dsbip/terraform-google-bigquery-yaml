@@ -48,7 +48,7 @@ routines:
     arguments:
       - { name: email, data_type: STRING }
     return_type: STRING
-    definition_body: LOWER(TRIM(email))
+    definition_file: routines/normalize_email.sql
 
   # Complex types as mappings.
   split_tags:
@@ -60,7 +60,7 @@ routines:
     return_type:
       typeKind: ARRAY
       arrayElementType: { typeKind: STRING }
-    definition_body: ARRAY(SELECT DISTINCT TRIM(t) FROM UNNEST(SPLIT(csv, ',')) AS t WHERE TRIM(t) != '')
+    definition_file: routines/split_tags.sql
 
   order_summary:
     dataset: udfs
@@ -75,7 +75,7 @@ routines:
         fields:
           - { name: id, type: { typeKind: STRING } }
           - { name: amount_usd, type: { typeKind: NUMERIC } }
-    definition_body: STRUCT(order_id AS id, amount AS amount_usd)
+    definition_file: routines/order_summary.sql
 
   # JavaScript UDF. The body comes from a file; JavaScript template
   # literals are safe because only *.tftpl files are rendered.
@@ -87,7 +87,7 @@ routines:
     arguments:
       - { name: s, data_type: STRING }
     return_type: STRING
-    definition_file: js/title_case.js
+    definition_file: routines/title_case.js
 
   # Table-valued function.
   orders_above:
@@ -96,10 +96,7 @@ routines:
     routine_type: TABLE_VALUED_FUNCTION
     arguments:
       - { name: min_amount, data_type: NUMERIC }
-    definition_body: |
-      SELECT order_id, amount
-      FROM `${project_id}.udfs.orders`
-      WHERE amount > min_amount
+    definition_file: routines/orders_above.sql.tftpl
     return_table_type:
       columns:
         - { name: order_id, type: STRING }
@@ -114,7 +111,7 @@ routines:
     arguments:
       - { name: older_than_days, data_type: INT64, mode: IN }
       - { name: archived, data_type: INT64, mode: OUT }
-    definition_file: sql/archive_cancelled_orders.sql.tftpl
+    definition_file: routines/archive_cancelled_orders.sql.tftpl
     iam:
       - role: roles/bigquery.dataViewer
         members: [group:data-engineers@example.com]
@@ -128,7 +125,7 @@ routines:
     arguments:
       - { name: email, data_type: STRING }
     return_type: STRING
-    definition_body: REGEXP_REPLACE(email, r'^[^@]+', 'xxxxx')
+    definition_file: routines/mask_email.sql
 
   # Remote function calling a Cloud Run service through the connection above.
   detect_language:

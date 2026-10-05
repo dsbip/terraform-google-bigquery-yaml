@@ -1,6 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://raw.githubusercontent.com/dsbip/terraform-google-bigquery-yaml/main/schemas/bigquery-config.schema.json",
+  "x-schema-revision": 2,
   "title": "terraform-google-bigquery-yaml configuration",
   "description": "YAML configuration consumed by the terraform-google-bigquery-yaml module. Map keys under datasets, tables, views, materialized_views, routines, connections and transfers are logical keys; each one is also the default resource ID. Tables, views, materialized views and routines are top-level sections whose entries name their dataset with dataset: <key under datasets>. The module reads the 'properties' of every definition below to reject unknown keys, so this file is the single source of truth for the configuration shape.",
   "type": "object",
@@ -961,15 +962,7 @@
           "$ref": "#/definitions/schema"
         },
         "policyTags": {
-          "type": "object",
-          "properties": {
-            "names": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          }
+          "$ref": "#/definitions/policy_tags"
         },
         "maxLength": {
           "anyOf": [
@@ -1020,7 +1013,7 @@
           "type": "string"
         },
         "rangeElementType": {
-          "type": "object"
+          "$ref": "#/definitions/range_element_type"
         },
         "dataPolicies": {
           "type": "array"
@@ -1045,6 +1038,45 @@
         }
       },
       "additionalProperties": false
+    },
+    "policy_tags": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Column-level security: the policy tags applied to the column.",
+      "properties": {
+        "names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Policy tag resource names: projects/P/locations/L/taxonomies/T/policyTags/ID."
+        }
+      }
+    },
+    "range_element_type": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "description": "Element type of a RANGE column.",
+      "properties": {
+        "type": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "DATE",
+                "DATETIME",
+                "TIMESTAMP"
+              ]
+            },
+            {
+              "$ref": "#/definitions/template_placeholder"
+            }
+          ]
+        }
+      }
     },
     "time_partitioning": {
       "type": "object",

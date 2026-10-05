@@ -16,8 +16,8 @@
 locals {
   # Allowed keys of each schema definition; "root" is the top-level mapping.
   schema_keys = merge(
-    { for name, def in local.schema.definitions : name => keys(try(def.properties, {})) },
-    { root = keys(local.schema.properties) },
+    { for name, def in try(local.schema.definitions, {}) : name => keys(try(def.properties, {})) },
+    { root = try(keys(local.schema.properties), []) },
   )
 
   # Keys that identify or define a single resource and so cannot be defaults.
@@ -120,7 +120,13 @@ locals {
     ]),
 
     # Table schema fields (inline and from schema files)
-    [for f in local.schema_fields : { path = f.path, value = f.value, def = "schema_field" }],
+    flatten([
+      for f in local.schema_fields : [
+        { path = f.path, value = f.value, def = "schema_field" },
+        { path = "${f.path}.policyTags", value = try(f.value.policyTags, null), def = "policy_tags" },
+        { path = "${f.path}.rangeElementType", value = try(f.value.rangeElementType, null), def = "range_element_type" },
+      ]
+    ]),
 
     # Routines
     flatten([
@@ -205,7 +211,7 @@ locals {
         # Likely intended keys: same letters in another order (transposed
         # typos), or the same first or last three characters.
         suggestions = length(key) < 3 ? [] : [
-          for a in local.schema_keys[c.def] : a
+          for a in try(local.schema_keys[c.def], []) : a
           if length(a) >= 3 && (
             join("", sort(split("", a))) == join("", sort(split("", key))) ||
             substr(a, 0, 3) == substr(key, 0, 3) ||
@@ -214,7 +220,7 @@ locals {
         ]
       }
       # v1 nesting (datasets.<key>.tables, ...) is reported by nesting_errors.
-      if !contains(local.schema_keys[c.def], key) && !(c.def == "dataset" && contains(local.child_types, key))
+      if !contains(try(local.schema_keys[c.def], []), key) && !(c.def == "dataset" && contains(local.child_types, key))
     ]
     if c.def != null
   ])
@@ -247,6 +253,7 @@ locals {
     [for c in values(local.children.routines) : { path = "${c.path}.arguments", value = try(c.value.arguments, null) }],
     [for c in values(local.children.routines) : { path = "${c.path}.iam", value = try(c.value.iam, null) }],
     [for c in values(local.children.routines) : { path = "${c.path}.imported_libraries", value = try(c.value.imported_libraries, null) }],
+    [for f in local.schema_fields : { path = "${f.path}.policyTags.names", value = try(f.value.policyTags.names, null) }],
     [for k, v in local.connections_input : { path = "connections.${k}.iam", value = try(v.iam, null) }],
     [for type in ["tables", "views", "materialized_views", "routines", "connections"] : { path = "defaults.${type}.iam", value = try(local.defaults[type].iam, null) }],
   )
@@ -548,32 +555,50 @@ locals {
     ]
   ])
 
-  # SQL of views and materialized views: empty queries, and placeholders in a
-  # file that is not rendered. Only *.tftpl files are rendered, so a .sql file
-  # using ${project_id} would reach BigQuery as written. Other ${...} text can be
-  # legitimate SQL (e.g. in a string literal) and is left alone.
+  # SQL of views, materialized views and transfers (scheduled queries): empty
+  # queries, and placeholders in a file that is not rendered. Only *.tftpl files
+  # are rendered, so a .sql file using ${project_id} would reach BigQuery as
+  # written. Other ${...} text can be legitimate SQL (e.g. in a string literal)
+  # and is left alone. Routine bodies get the same checks in routine_body_errors.
   sql_template_names = concat(["project_id", "datasets"], try(keys(var.template_vars), []))
 
+  # SQL that starts with CREATE, after any comments (--, # or /* */). A view's
+  # or routine's SQL is only its query or body: the module creates the object
+  # from the YAML, and BigQuery would reject a CREATE statement during apply.
+  # #standardSQL directives are comments and are allowed.
+  sql_create_pattern = "(?i)^\\s*(?:(?:--|#)[^\\n]*\\n\\s*|/\\*(?s:.*?)\\*/\\s*)*create\\b"
+
+  # view: whether the SQL defines a view (scheduled queries may run DDL).
+  sql_texts = concat(
+    flatten([
+      for type, entries in { views = local.views, materialized_views = local.materialized_views } : [
+        for k, v in entries : { path = v.path, sql = v.query, file = "${type}|${k}|query_file", view = true }
+      ]
+    ]),
+    [for k, t in local.transfers : { path = t.path, sql = try(t.params.query, null), file = "transfers|${k}|query_file", view = false }],
+  )
+
   query_content_errors = flatten([
-    for type, entries in { views = local.views, materialized_views = local.materialized_views } : [
-      for k, v in entries : concat(
-        try(trimspace(v.query), "-") != "" ? [] : [
-          contains(keys(local.file_contents), "${type}|${k}|query_file")
-          ? "${v.path}.query_file: ${local.file_paths["${type}|${k}|query_file"]} is empty"
-          : "${v.path}.query: is empty"
-        ],
-        [
-          for names in [
-            distinct([
-              for name in flatten(try(regexall("\\$\\{\\s*([A-Za-z_][A-Za-z0-9_]*)", v.query), [])) : name
-              if contains(local.sql_template_names, name)
-            ])
-          ] :
-          "${v.path}.query_file: ${local.file_paths["${type}|${k}|query_file"]} uses ${join(", ", formatlist("$${%s}", names))}, but only files ending in .tftpl are rendered; rename it to ${local.file_paths["${type}|${k}|query_file"]}.tftpl"
-          if length(names) > 0 && try(contains(keys(local.file_contents), "${type}|${k}|query_file") && !endswith(local.file_paths["${type}|${k}|query_file"], ".tftpl"), false)
-        ],
-      )
-    ]
+    for q in local.sql_texts : concat(
+      try(trimspace(q.sql), "-") != "" ? [] : [
+        contains(keys(local.file_contents), q.file)
+        ? "${q.path}.query_file: ${local.all_file_paths[q.file]} is empty"
+        : "${q.path}.query: is empty"
+      ],
+      [
+        for names in [
+          distinct([
+            for name in flatten(try(regexall("\\$\\{\\s*([A-Za-z_][A-Za-z0-9_]*)", q.sql), [])) : name
+            if contains(local.sql_template_names, name)
+          ])
+        ] :
+        "${q.path}.query_file: ${local.all_file_paths[q.file]} uses ${join(", ", formatlist("$${%s}", names))}, but only files ending in .tftpl are rendered; rename it to ${local.all_file_paths[q.file]}.tftpl"
+        if length(names) > 0 && try(contains(keys(local.file_contents), q.file) && !endswith(local.all_file_paths[q.file], ".tftpl"), false)
+      ],
+      q.view && try(length(regexall(local.sql_create_pattern, q.sql)) > 0, false) ? [
+        "${q.path}.${contains(keys(local.file_contents), q.file) ? "query_file: ${try(local.all_file_paths[q.file], "")}" : "query:"} starts with CREATE; keep only the query after AS (the module creates the view from the YAML: dataset, key or table_id, description, labels)"
+      ] : [],
+    )
   ])
 
   materialized_view_errors = flatten([
@@ -615,8 +640,8 @@ locals {
   # unknown keys are reported through mapping_checks.
   # ---------------------------------------------------------------------------
 
-  schema_field_types = local.schema.definitions.schema_field.properties.type.anyOf[0].enum
-  schema_field_modes = local.schema.definitions.schema_field.properties.mode.anyOf[0].enum
+  schema_field_types = try(local.schema.definitions.schema_field.properties.type.anyOf[0].enum, [])
+  schema_field_modes = try(local.schema.definitions.schema_field.properties.mode.anyOf[0].enum, [])
 
   # parent: the path of the list the field is in, for duplicate names.
   schema_fields_1 = flatten([
@@ -667,6 +692,11 @@ locals {
       contains(["RECORD", "STRUCT"], try(upper(tostring(f.value.type)), "")) && try(length(concat(f.value.fields, [])), 0) == 0 ? [
         "${f.path}.fields: is required for ${try(upper(tostring(f.value.type)), "RECORD")} fields"
       ] : [],
+      try(upper(tostring(f.value.type)), "") != "RANGE" ? [] :
+      try(f.value.rangeElementType.type, null) == null ? ["${f.path}.rangeElementType: is required for RANGE fields, e.g. {\"type\": \"DATE\"}"] :
+      try(contains(["DATE", "DATETIME", "TIMESTAMP"], upper(tostring(f.value.rangeElementType.type))), false) ? [] : [
+        "${f.path}.rangeElementType.type: \"${try(tostring(f.value.rangeElementType.type), "?")}\" must be DATE, DATETIME or TIMESTAMP"
+      ],
     )
     if can(keys(f.value))
   ])
@@ -724,11 +754,54 @@ locals {
       can(local.routines_merged[k].definition_body) && can(local.routines_merged[k].definition_file) ? ["${r.path}: set definition_body or definition_file, not both"] : [],
       !can(local.routines_merged[k].definition_body) && !can(local.routines_merged[k].definition_file) && length(r.remote_function_options) == 0 && length(r.spark_options) == 0 ? ["${r.path}: definition_body or definition_file is required"] : [],
       can(local.routines_merged[k].return_type) && r.return_type == null ? ["${r.path}.return_type: must be a type name, a JSON string or a mapping"] : [],
+      r.language == "JAVASCRIPT" && r.routine_type == "SCALAR_FUNCTION" && !can(local.routines_merged[k].return_type) ? ["${r.path}.return_type: is required for JavaScript functions"] : [],
       can(local.routines_merged[k].return_table_type) && r.return_table_type == null ? ["${r.path}.return_table_type: must be {columns: [{name, type}]} or a JSON string"] : [],
       [
         for i, a in r.arguments : "${r.path}.arguments[${i}].data_type: is required unless argument_kind is ANY_TYPE or FIXED_TABLE"
         if a.data_type == null && (a.argument_kind == null ? true : !try(contains(["ANY_TYPE", "FIXED_TABLE"], a.argument_kind), false))
       ],
+    )
+  ])
+
+  # Routine bodies. A file's extension must match the routine's language (a .js
+  # body in a routine that defaults to SQL fails only in BigQuery), and a SQL
+  # file that uses the module's template variables must be a .tftpl file, as
+  # for views. JavaScript and Python files may contain ${...} of their own.
+  routine_file_languages = { sql = "SQL", js = "JAVASCRIPT", py = "PYTHON" }
+
+  routine_files = {
+    for k, r in local.routines : k => {
+      path     = local.file_paths["routines|${k}|definition_file"]
+      language = lookup(local.routine_file_languages, lower(reverse(split(".", trimsuffix(local.file_paths["routines|${k}|definition_file"], ".tftpl")))[0]), null)
+      content  = local.file_contents["routines|${k}|definition_file"]
+    }
+    if contains(keys(local.file_contents), "routines|${k}|definition_file")
+  }
+
+  routine_body_errors = flatten([
+    for k, r in local.routines : concat(
+      can(local.routines_merged[k].definition_body) && trimspace(r.definition_body) == "" && length(r.remote_function_options) == 0 && length(r.spark_options) == 0 ? ["${r.path}.definition_body: is empty"] : [],
+      coalesce(r.language, "SQL") == "SQL" && try(length(regexall(local.sql_create_pattern, r.definition_body)) > 0, false) ? [
+        "${r.path}.${contains(keys(local.routine_files), k) ? "definition_file: ${try(local.routine_files[k].path, "")}" : "definition_body:"} starts with CREATE; keep only the body: the expression inside AS (...) for a function, the query for a table function, the BEGIN ... END block for a procedure (the module creates the routine from the YAML)"
+      ] : [],
+      flatten([
+        for f in try([local.routine_files[k]], []) : concat(
+          trimspace(f.content) == "" ? ["${r.path}.definition_file: ${f.path} is empty"] : [],
+          f.language != null && f.language != coalesce(r.language, "SQL") ? [
+            "${r.path}.definition_file: ${f.path} is a ${coalesce(f.language, "?")} file, but the routine's language is ${coalesce(r.language, "SQL")}${r.language == null ? " (the default)" : ""}; set language: ${coalesce(f.language, "?")}"
+          ] : [],
+          [
+            for names in [
+              distinct([
+                for name in flatten(regexall("\\$\\{\\s*([A-Za-z_][A-Za-z0-9_]*)", f.content)) : name
+                if contains(local.sql_template_names, name)
+              ])
+            ] :
+            "${r.path}.definition_file: ${f.path} uses ${join(", ", formatlist("$${%s}", names))}, but only files ending in .tftpl are rendered; rename it to ${f.path}.tftpl"
+            if length(names) > 0 && coalesce(r.language, "SQL") == "SQL" && !endswith(f.path, ".tftpl")
+          ],
+        )
+      ]),
     )
   ])
 
@@ -839,6 +912,65 @@ locals {
   ])
 
   # ---------------------------------------------------------------------------
+  # Labels and locations
+  #
+  # BigQuery rejects these only during apply. Label keys and values may contain
+  # only lowercase letters (international ones too), digits, underscores and
+  # dashes, up to 63 characters, and keys start with a letter. Locations are
+  # regions (europe-west2), multi-regions (US, EU) or BigQuery Omni locations;
+  # only the shape is checked, so new regions need no module change.
+  # ---------------------------------------------------------------------------
+
+  label_key_pattern   = "^[\\p{Ll}\\p{Lo}][\\p{Ll}\\p{Lo}\\p{N}_-]{0,62}$"
+  label_value_pattern = "^[\\p{Ll}\\p{Lo}\\p{N}_-]{0,63}$"
+
+  label_sources = concat(
+    [{ path = "var.labels", value = var.labels }],
+    [{ path = "defaults.labels", value = try(local.defaults.labels, null) }],
+    [for type in ["datasets", "tables", "views", "materialized_views"] : { path = "defaults.${type}.labels", value = try(local.defaults[type].labels, null) }],
+    [for k, v in local.datasets_input : { path = "datasets.${k}.labels", value = try(v.labels, null) }],
+    [for c in local.table_like_children : { path = "${c.path}.labels", value = try(c.value.labels, null) }],
+  )
+
+  # Mappings that are not mappings are reported by mapping_errors.
+  label_errors = flatten([
+    for src in local.label_sources : [
+      for k, v in try(merge({}, src.value), {}) : concat(
+        length(regexall(local.label_key_pattern, k)) > 0 ? [] : [
+          "${src.path}: label key \"${k}\" must start with a lowercase letter and contain only lowercase letters, digits, underscores and dashes (63 characters at most)"
+        ],
+        v == null ? [] :
+        !can(tostring(v)) ? ["${src.path}.${k}: label value must be a string"] :
+        length(regexall(local.label_value_pattern, tostring(v))) > 0 ? [] : [
+          "${src.path}.${k}: label value \"${v}\" may contain only lowercase letters, digits, underscores and dashes (63 characters at most)${length(regexall(local.label_value_pattern, lower(tostring(v)))) > 0 ? "; use \"${lower(tostring(v))}\"" : ""}"
+        ],
+      )
+    ]
+  ])
+
+  label_count_errors = [
+    for r in concat(values(local.datasets), values(local.tables), values(local.views), values(local.materialized_views)) :
+    "${r.path}: has ${length(r.labels)} labels with the defaults; BigQuery allows 64"
+    if try(length(r.labels), 0) > 64
+  ]
+
+  location_pattern = "(?i)^(us|eu|[a-z]+-[a-z]+[0-9]+|aws-[a-z0-9-]+|azure-[a-z0-9]+)$"
+
+  location_sources = concat(
+    [{ path = "defaults.location", value = try(local.defaults.location, null) }],
+    [for type in ["datasets", "connections", "transfers"] : { path = "defaults.${type}.location", value = try(local.defaults[type].location, null) }],
+    [for k, v in local.datasets_input : { path = "datasets.${k}.location", value = try(v.location, null) }],
+    [for k, v in local.connections_input : { path = "connections.${k}.location", value = try(v.location, null) }],
+    [for k, v in local.transfers_input : { path = "transfers.${k}.location", value = try(v.location, null) }],
+  )
+
+  location_errors = [
+    for src in local.location_sources :
+    "${src.path}: \"${try(tostring(src.value), "?")}\" is not a BigQuery location; use a region such as europe-west2, a multi-region (US or EU), or a BigQuery Omni location (aws-..., azure-...)"
+    if src.value == null ? false : !can(regex(local.location_pattern, tostring(src.value)))
+  ]
+
+  # ---------------------------------------------------------------------------
   # Defaults
   # ---------------------------------------------------------------------------
 
@@ -850,7 +982,22 @@ locals {
     ]
   ])
 
-  validation_errors = compact(concat(
+  # ---------------------------------------------------------------------------
+  # The schema file
+  #
+  # The allowed keys come from schemas/bigquery-config.schema.json, so it must
+  # be from the same version of the module as these .tf files. In a partial copy
+  # (new .tf files, old schema file) valid keys such as tables would be reported
+  # as unknown; report the copy instead, and nothing else.
+  # ---------------------------------------------------------------------------
+
+  schema_file_revision = try(tonumber(local.schema["x-schema-revision"]), 1)
+
+  schema_mismatch_errors = local.schema_file_revision == local.schema_revision ? [] : [
+    "${path.module}/schemas/bigquery-config.schema.json is from ${local.schema_file_revision < local.schema_revision ? "an older" : "a newer"} version of the module than its .tf files (schema revision ${local.schema_file_revision}, expected ${local.schema_revision}). The module reads the allowed keys from that file, so valid keys would be reported as unknown. Copy the whole module directory, schemas/ included, from one version of the module."
+  ]
+
+  validation_errors = length(local.schema_mismatch_errors) > 0 ? local.schema_mismatch_errors : compact(concat(
     local.config_errors,
     local.mapping_errors,
     local.list_errors,
@@ -875,11 +1022,15 @@ locals {
     local.duplicate_table_errors,
     local.file_errors,
     local.routine_errors,
+    local.routine_body_errors,
     local.boolean_name_errors,
     local.connection_errors,
     local.connection_duplicate_errors,
     local.connection_ref_errors,
     local.transfer_errors,
+    local.label_errors,
+    local.label_count_errors,
+    local.location_errors,
   ))
 }
 

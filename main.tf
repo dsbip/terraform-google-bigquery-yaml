@@ -12,6 +12,11 @@ locals {
   # of every object from it, so IDE validation and the module cannot disagree.
   schema = jsondecode(file("${path.module}/schemas/bigquery-config.schema.json"))
 
+  # The schema revision these .tf files need ("x-schema-revision" in the file).
+  # Bump both whenever the code starts to depend on new content of the schema,
+  # so that a copy of the module with an older schema file is reported as such.
+  schema_revision = 2
+
   config_template_vars = try(merge({ project_id = var.project_id }, var.template_vars), { project_id = var.project_id })
 
   config_text = (

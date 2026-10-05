@@ -2,11 +2,12 @@
 in sync with what the Terraform code expects?"""
 import copy
 import json
+import re
 
 import pytest
 from jsonschema import Draft7Validator
 
-from conftest import EXAMPLES, example_configs, load_yaml, referenced_definitions
+from conftest import EXAMPLES, REPO, example_configs, load_yaml, referenced_definitions
 
 
 def test_schema_is_valid_draft7(schema):
@@ -55,6 +56,9 @@ INVALID = [
     ("dataset that is not a string", {"tables": {"t": {"dataset": ["a"]}}}),
     ("v1 nesting of tables in a dataset", {"datasets": {"a": {"tables": {"t": {}}}}}),
     ("dataset as a default", {"defaults": {"tables": {"dataset": "a"}}}),
+    ("schema field key typo", {"tables": {"t": {"dataset": "a", "schema": [{"name": "x", "type": "STRING", "mdoe": "REQUIRED"}]}}}),
+    ("policy tag key typo", {"tables": {"t": {"dataset": "a", "schema": [{"name": "x", "type": "STRING", "policyTags": {"name": ["p"]}}]}}}),
+    ("bad range element type", {"tables": {"t": {"dataset": "a", "schema": [{"name": "x", "type": "RANGE", "rangeElementType": {"type": "INT64"}}]}}}),
     ("access without members", {"datasets": {"a": {"access": [{"role": "READER"}]}}}),
     ("identity key as default", {"defaults": {"tables": {"table_id": "x"}}}),
     ("placeholder-free string for a boolean", {"datasets": {"a": {"delete_contents_on_destroy": "yes please"}}}),
@@ -100,9 +104,10 @@ def test_child_sections_require_a_dataset(schema):
 
 
 @pytest.mark.parametrize("path", example_configs(), ids=lambda p: p.parent.name + "/" + p.name)
-def test_examples_keep_schemas_and_sql_in_files(path):
+def test_examples_keep_schemas_sql_and_routines_in_files(path):
     """The examples show the recommended layout: table schemas in JSON files
-    (schema_file) and view SQL in SQL files (query_file)."""
+    (schema_file), view SQL in SQL files (query_file) and routine bodies in
+    routines/ (definition_file)."""
     doc = load_yaml(path)
     for key, table in (doc.get("tables") or {}).items():
         assert "schema" not in table, f"tables.{key}: use schema_file with a JSON file"
@@ -114,6 +119,14 @@ def test_examples_keep_schemas_and_sql_in_files(path):
             assert "query" not in view, f"{section}.{key}: use query_file with a SQL file"
             assert view["query_file"].endswith((".sql", ".sql.tftpl")), f"{section}.{key}: {view['query_file']}"
             assert (path.parent / view["query_file"]).is_file(), view["query_file"]
+    extensions = {"SQL": (".sql", ".sql.tftpl"), "JAVASCRIPT": (".js",), "PYTHON": (".py",)}
+    for key, routine in (doc.get("routines") or {}).items():
+        assert "definition_body" not in routine, f"routines.{key}: use definition_file with a file in routines/"
+        if "definition_file" in routine:
+            language = str(routine.get("language", "SQL")).upper()
+            assert routine["definition_file"].startswith("routines/"), f"routines.{key}: {routine['definition_file']}"
+            assert routine["definition_file"].endswith(extensions[language]), f"routines.{key}: {routine['definition_file']}"
+            assert (path.parent / routine["definition_file"]).is_file(), routine["definition_file"]
 
 
 def example_schema_files():
@@ -128,3 +141,12 @@ def test_example_schema_files_conform(schema, path):
     with open(path, encoding="utf-8") as fh:
         errors = list(validator.iter_errors(json.load(fh)))
     assert not errors, [f"{'/'.join(map(str, e.path))}: {e.message}" for e in errors]
+
+
+def test_schema_revision_matches_the_module(schema):
+    """validation.tf compares the schema file's revision with the one the .tf
+    files expect, to catch partial copies of the module; both must change
+    together."""
+    main_tf = (REPO / "main.tf").read_text(encoding="utf-8")
+    expected = int(re.search(r"^\s*schema_revision\s*=\s*(\d+)", main_tf, re.M).group(1))
+    assert schema["x-schema-revision"] == expected

@@ -1,0 +1,3 @@
+SELECT order_id, amount
+FROM `${project_id}.${datasets.sales}.orders`
+WHERE amount > min_amount

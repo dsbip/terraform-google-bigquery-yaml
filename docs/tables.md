@@ -113,7 +113,8 @@ Editors do not check schema files, and the provider silently drops field keys it
 - `name` and `type` are present;
 - `type` is a BigQuery type (`STRING`, `INT64`, `RECORD`, ...) and `mode` is `NULLABLE`, `REQUIRED` or `REPEATED` (case-insensitive), with suggestions for typos;
 - every key is a TableFieldSchema key (`name`, `type`, `mode`, `description`, `fields`, `policyTags`, `maxLength`, `precision`, `scale`, `roundingMode`, `collation`, `defaultValueExpression`, `rangeElementType`, `dataPolicies`, `foreignTypeDefinition`, `timestampPrecision`), with suggestions;
-- `RECORD` / `STRUCT` fields have `fields`;
+- `policyTags` holds only `names`, a list. A misspelt key would otherwise be dropped and the column left without column-level security;
+- `RECORD` / `STRUCT` fields have `fields`, and `RANGE` fields have `rangeElementType: {"type": "DATE"}` (or `DATETIME`, `TIMESTAMP`);
 - column names are unique within a record, ignoring case, as in BigQuery.
 
 Problems point into the file by position, for example:
