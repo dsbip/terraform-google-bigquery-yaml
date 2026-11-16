@@ -1,0 +1,5 @@
+[
+  { "name": "event_id", "type": "STRING" },
+  { "name": "payload", "type": "JSON" },
+  { "name": "event_time", "type": "TIMESTAMP" }
+]

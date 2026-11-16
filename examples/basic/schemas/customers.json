@@ -1,0 +1,6 @@
+[
+  { "name": "customer_id", "type": "STRING", "mode": "REQUIRED", "description": "Primary key" },
+  { "name": "email", "type": "STRING" },
+  { "name": "country", "type": "STRING" },
+  { "name": "created_at", "type": "TIMESTAMP", "mode": "REQUIRED" }
+]

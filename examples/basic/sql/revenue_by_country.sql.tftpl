@@ -1,0 +1,4 @@
+SELECT c.country, SUM(o.amount) AS revenue
+FROM `${project_id}.sales.orders` AS o
+JOIN `${project_id}.sales.customers` AS c USING (customer_id)
+GROUP BY c.country

@@ -1,0 +1,6 @@
+[
+  { "name": "session_id", "type": "STRING" },
+  { "name": "customer_id", "type": "STRING" },
+  { "name": "page", "type": "STRING" },
+  { "name": "event_time", "type": "TIMESTAMP" }
+]

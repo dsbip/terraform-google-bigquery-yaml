@@ -1,30 +1,38 @@
 # Views and materialized views
 
+Views and materialized views are declared in the top-level `views` and `materialized_views` sections. Each names its dataset with `dataset:`, a key under `datasets`:
+
 ```yaml
 datasets:
-  reporting:
-    views:
-      revenue_by_country:
-        description: Revenue per country.
-        query: |
-          SELECT country, SUM(amount) AS revenue
-          FROM `${project_id}.sales.orders`
-          GROUP BY country
-      customers:
-        query_file: sql/customers.sql.tftpl
-    materialized_views:
-      daily_revenue:
-        query: |
-          SELECT DATE(ordered_at) AS day, SUM(amount) AS revenue
-          FROM `${project_id}.sales.orders`
-          GROUP BY day
-        refresh_interval_ms: 1800000
+  reporting: {}
+
+views:
+  revenue_by_country:
+    dataset: reporting
+    description: Revenue per country.
+    query: |
+      SELECT country, SUM(amount) AS revenue
+      FROM `${project_id}.sales.orders`
+      GROUP BY country
+  customers:
+    dataset: reporting
+    query_file: sql/customers.sql.tftpl
+
+materialized_views:
+  daily_revenue:
+    dataset: reporting
+    query: |
+      SELECT DATE(ordered_at) AS day, SUM(amount) AS revenue
+      FROM `${project_id}.sales.orders`
+      GROUP BY day
+    refresh_interval_ms: 1800000
 ```
 
 ## View keys
 
 | Key | Type | Default | Description |
 |---|---|---|---|
+| `dataset` | string | required | Key of the view's dataset under `datasets`. |
 | `table_id` | string | map key | View ID. |
 | `query` | string | | GoogleSQL query. Exactly one of `query` / `query_file`. |
 | `query_file` | path | | SQL file; `*.tftpl` files are template-rendered ([templating.md](templating.md)). |
@@ -43,6 +51,7 @@ Changing a view's query is an in-place update.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
+| `dataset` | string | required | Key of the materialized view's dataset under `datasets`. |
 | `table_id` | string | map key | Materialized view ID. |
 | `query` / `query_file` | string / path | | Exactly one is required. |
 | `enable_refresh` | bool | `true` (BigQuery) | Refresh automatically when base tables change. |
@@ -78,20 +87,45 @@ Put each layer in its own YAML file and module call, chained with `depends_on`:
 
 ```hcl
 module "base" {
-  source      = "github.com/dsbip/terraform-google-bigquery-yaml?ref=v1.0.0"
+  source      = "github.com/dsbip/terraform-google-bigquery-yaml?ref=v2.0.0"
   project_id  = var.project_id
   config_file = "${path.module}/base.yaml"      # tables and first-level views
 }
 
 module "marts" {
-  source      = "github.com/dsbip/terraform-google-bigquery-yaml?ref=v1.0.0"
+  source      = "github.com/dsbip/terraform-google-bigquery-yaml?ref=v2.0.0"
   project_id  = var.project_id
   config_file = "${path.module}/marts.yaml"     # views over base views
   depends_on  = [module.base]
 }
 ```
 
-The second file can still reference datasets from the first with `create: false`, for example to authorize its views on them. See the [layered-views example](../examples/layered-views).
+The second file declares datasets from the first with `create: false` when its views or authorizations need them. See the [layered-views example](../examples/layered-views).
+
+## SQL files
+
+Keep each view's SQL in its own file and reference it with `query_file`, relative to the configuration file. Materialized views work the same way:
+
+```yaml
+views:
+  revenue_by_country:
+    dataset: reporting
+    query_file: sql/revenue_by_country.sql.tftpl
+```
+
+```sql
+-- sql/revenue_by_country.sql.tftpl
+SELECT c.country, SUM(o.amount) AS revenue
+FROM `${project_id}.${datasets.sales}.orders` AS o
+JOIN `${project_id}.${datasets.sales}.customers` AS c USING (customer_id)
+GROUP BY c.country
+```
+
+- **`.sql.tftpl`** files are rendered with `templatefile()`: `${project_id}`, `${datasets.<key>}` (the dataset's real ID, which follows `dataset_id` overrides) and every `template_vars` entry are available. Write `$${` for a literal `${`.
+- **`.sql`** files are sent to BigQuery exactly as written.
+- The file holds **only the query** (`SELECT ...` or `WITH ...`), not a `CREATE OR REPLACE VIEW ... AS` statement. The module creates the view through the BigQuery API from the YAML (the dataset, the key or `table_id`, `description`, `labels`), and BigQuery takes only the query. If you are moving DDL files over, delete everything up to and including `AS`. A file that starts with `CREATE` fails the plan. Comments and a `#standardSQL` line before the query are fine.
+- The plan fails if a `.sql` file uses `${project_id}`, `${datasets...}` or a `template_vars` name, which only a `.tftpl` file would have replaced; rename the file to `.sql.tftpl`. Other `${...}` text, for example in a string literal, is left alone.
+- The plan also fails for an empty file or an empty `query`.
 
 ## SQL tips
 

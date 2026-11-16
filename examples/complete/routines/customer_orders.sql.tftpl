@@ -1,0 +1,3 @@
+SELECT order_id, order_date, amount, status
+FROM `${project_id}.core.fct_orders`
+WHERE customer_id = customer AND order_date BETWEEN from_date AND to_date

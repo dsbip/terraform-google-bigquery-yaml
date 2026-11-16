@@ -9,8 +9,12 @@ datasets:
   events:
     dataset_id: events_${env}
     description: Events for ${env} in ${project_id}
-    views:
-      latest:
-        query_file: sql/latest.sql.tftpl
-      static:
-        query_file: sql/static.sql
+
+views:
+  latest:
+    dataset: events
+    query_file: sql/latest.sql.tftpl
+
+  static:
+    dataset: events
+    query_file: sql/static.sql

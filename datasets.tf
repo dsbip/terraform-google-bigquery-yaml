@@ -203,14 +203,16 @@ resource "google_bigquery_dataset_access" "access" {
 # Authorized views, datasets and routines (datasets.*.authorized_*)
 #
 # String references are resolved in this order:
-#   "dataset_key.name" matching a view/routine in this file -> its real IDs
-#   "dataset_key.name" whose dataset_key is in this file  -> that dataset's IDs
-#   "dataset.name"                                          -> same project as the source dataset
-#   "project.dataset.name"                                  -> used as written
+#   "dataset_key.key" of a view/routine in this file -> its real IDs
+#   "key" of a view/routine in this file             -> its real IDs
+#   "dataset_key.name" whose dataset_key is in this file -> that dataset's IDs
+#   "dataset.name"                                   -> same project as the source dataset
+#   "project.dataset.name"                           -> used as written
 # -----------------------------------------------------------------------------
 
 locals {
-  # Real IDs of everything a reference can point to, keyed like the YAML.
+  # Real IDs of everything a reference can point to, keyed
+  # "<dataset key>.<key>".
   authorizable_view_ids = {
     for k, v in merge(local.views, local.materialized_views) : k => {
       project_id = v.project
@@ -225,6 +227,15 @@ locals {
       routine_id = r.routine_id
     }
   }
+
+  # Key alone ("orders_v") => "<dataset key>.<key>". A view and a materialized
+  # view may share a key; such a reference is ambiguous (validation.tf) and
+  # resolves to the view.
+  authorizable_view_addresses = merge(
+    { for k, c in local.children.materialized_views : c.key => k },
+    { for k, c in local.children.views : c.key => k },
+  )
+  authorizable_routine_addresses = { for k, c in local.children.routines : c.key => k }
 
   # Empty list items are skipped; unresolvable references resolve to "" IDs
   # and are reported by validation.tf.
@@ -243,6 +254,7 @@ locals {
             table_id   = try(coalesce(tostring(ref.table_id), ""), "")
           } :
           contains(keys(local.authorizable_view_ids), ref) ? local.authorizable_view_ids[ref] :
+          contains(keys(local.authorizable_view_addresses), ref) ? local.authorizable_view_ids[local.authorizable_view_addresses[ref]] :
           length(split(".", ref)) == 2 ? {
             project_id = try(local.datasets[split(".", ref)[0]].project, ds.project)
             dataset_id = try(local.datasets[split(".", ref)[0]].dataset_id, split(".", ref)[0])
@@ -317,6 +329,7 @@ locals {
             routine_id = try(coalesce(tostring(ref.routine_id), ""), "")
           } :
           contains(keys(local.authorizable_routine_ids), ref) ? local.authorizable_routine_ids[ref] :
+          contains(keys(local.authorizable_routine_addresses), ref) ? local.authorizable_routine_ids[local.authorizable_routine_addresses[ref]] :
           length(split(".", ref)) == 2 ? {
             project_id = try(local.datasets[split(".", ref)[0]].project, ds.project)
             dataset_id = try(local.datasets[split(".", ref)[0]].dataset_id, split(".", ref)[0])

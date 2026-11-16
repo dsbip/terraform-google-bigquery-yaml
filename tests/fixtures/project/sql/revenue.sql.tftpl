@@ -1,0 +1,3 @@
+SELECT DATE(ordered_at) AS day, SUM(amount) AS revenue
+FROM `${project_id}.${datasets.sales}.orders`
+GROUP BY day

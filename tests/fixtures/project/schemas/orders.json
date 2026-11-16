@@ -1,0 +1,14 @@
+[
+  { "name": "order_id", "type": "STRING", "mode": "REQUIRED", "description": "Primary key" },
+  { "name": "amount", "type": "NUMERIC", "precision": "12", "scale": "2" },
+  {
+    "name": "items",
+    "type": "RECORD",
+    "mode": "REPEATED",
+    "fields": [
+      { "name": "sku", "type": "STRING" },
+      { "name": "quantity", "type": "INT64" }
+    ]
+  },
+  { "name": "ordered_at", "type": "TIMESTAMP", "mode": "REQUIRED" }
+]

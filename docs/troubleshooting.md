@@ -17,20 +17,71 @@ Terraform's YAML parser follows YAML 1.1, where these unquoted words are boolean
 datasets:
   on: {}                         # becomes the key "true"
   sales:
-    tables:
-      t:
-        schema:
-          - { name: n, type: STRING }   # column name becomes false
+
+tables:
+  t:
+    dataset: sales
+    schema:
+      - { name: n, type: STRING }   # column name becomes false
 ```
 
 The module rejects keys and names that became booleans:
 
 ```
 datasets.true: YAML read this key as a boolean; quote it (e.g. "on":) ...
-datasets.sales.tables.t.schema[0].name: YAML read this name as the boolean false; quote it ...
+tables.t.schema[0].name: YAML read this name as the boolean false; quote it ...
 ```
 
 Quote them: `"on": {}`, `name: "n"`. Values elsewhere, such as descriptions and labels, are converted back to `"true"` / `"false"` strings, which may not be what you meant. Quote those too.
+
+### Tabs
+
+YAML allows only spaces for indentation. Text pasted from some editors, chats or spreadsheets is indented with tabs, and the file then fails to parse. The module names the lines:
+
+```
+The YAML cannot be parsed: tabs are used for indentation on lines 12, 13, 14. YAML allows only spaces; replace the tabs with spaces.
+```
+
+In VS Code, *Convert Indentation to Spaces* in the command palette fixes the whole file. Tabs inside a block scalar (for example in SQL under `query: |`) are content and are fine.
+
+### Duplicate keys
+
+Terraform's YAML parser keeps only the last of two equal keys and drops the other without a word. This is easy to hit when two datasets have tables with the same name:
+
+```yaml
+tables:
+  orders:
+    dataset: raw
+  orders:              # replaces the raw table above
+    dataset: staging
+```
+
+The module checks the file for duplicate keys before using it, and fails the plan instead:
+
+```
+tables.orders: defined on lines 2 and 4; YAML keeps only the last one. Keys must be unique within tables; rename the others (table_id sets the BigQuery ID independently of the key)
+```
+
+Give the second one its own key and keep the table name with `table_id`:
+
+```yaml
+tables:
+  orders:
+    dataset: raw
+  staging_orders:
+    dataset: staging
+    table_id: orders
+```
+
+The check covers top-level sections and the entries of `datasets`, `tables`, `views`, `materialized_views`, `routines`, `connections` and `transfers` written in block style. Line numbers refer to the file after template rendering.
+
+### Labels
+
+BigQuery label keys and values may contain only **lowercase** letters (international letters too), digits, underscores and dashes, up to 63 characters, and keys start with a letter. `team: GSS` fails during apply, so the plan reports it, with the lowercase spelling when that is valid:
+
+```
+defaults.labels.team: label value "GSS" may contain only lowercase letters, digits, underscores and dashes (63 characters at most); use "gss"
+```
 
 ### Braces
 
@@ -68,6 +119,14 @@ Comments are rendered too, and JavaScript template literals in the YAML need `$$
 ## Plan errors
 
 **`The BigQuery YAML configuration has N problem(s)`.** The configuration is invalid. Each line starts with the YAML path; see [validation.md](validation.md).
+
+**`.../schemas/bigquery-config.schema.json is from an older version of the module than its .tf files`.** The module directory is a mix of two versions, typically a copy of the module kept in your own repository (`source = "../../modules/bigquery"`) where new `.tf` files were copied over an old copy without its `schemas/` folder. The module reads the allowed keys from that file, so an old one would report valid keys such as `tables` and `dataset` as unknown. Replace the whole module directory with one version of the module: every `*.tf` file and `schemas/bigquery-config.schema.json` (`scripts/` is optional; `docs/`, `examples/` and `tests/` are not needed). Referencing the module from GitHub with `?ref=` avoids this.
+
+**`(root): unknown key "tables"` and `unknown key "dataset"` together.** The same mismatch with a module version from before this check existed: update the module directory as above.
+
+**`datasets.<key>.tables: tables are not nested in datasets`** (or `views`, `materialized_views`, `routines`). The file uses the v1 layout. Move each entry to the top-level section and add `dataset: <key>`; see [upgrading.md](upgrading.md).
+
+**`tables.<key>.dataset: is required`.** Every table, view, materialized view and routine names its dataset. `defaults` cannot supply it.
 
 **`Invalid value for variable ... config_file must point to an existing file`.** Relative paths in `config_file` are relative to the directory Terraform runs in. Use `"${path.module}/config.yaml"`.
 

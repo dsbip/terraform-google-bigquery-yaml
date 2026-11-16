@@ -1,0 +1,5 @@
+[
+  { "name": "customer_id", "type": "INT64", "mode": "REQUIRED" },
+  { "name": "score", "type": "FLOAT64" },
+  { "name": "scored_at", "type": "DATE" }
+]

@@ -5,9 +5,9 @@ Every way of defining a table:
 | Table | Shows |
 |---|---|
 | `events.page_views` | Schema from a JSON file with nested (`RECORD`) and repeated fields; hourly partitions on a column with expiration; required partition filter; clustering |
-| `events.sessions` | Schema from a YAML file; ingestion-time daily partitioning |
+| `events.sessions` | Ingestion-time daily partitioning |
 | `events.customer_scores` | Integer-range partitioning |
-| `events.users`, `events.purchases` | Primary key, and a foreign key from `purchases` to `users` referenced by key (`events.users`) |
+| `events.users`, `events.purchases` | Primary key, and a foreign key from `purchases` to `users` referenced by its key (`users`) |
 | `events.backfill_scratch` | A table that expires on a fixed date |
 | `landing.daily_orders_csv` | External CSV table with an explicit schema and CSV options |
 | `landing.clickstream_parquet` | External hive-partitioned Parquet with schema autodetection |
@@ -29,6 +29,4 @@ The external tables read `gs://<landing_bucket>/orders/`, `/clickstream/` and `/
 | File | Contents |
 |---|---|
 | `config.yaml` | The configuration |
-| `schemas/page_views.json` | JSON schema with a RECORD and a REPEATED field |
-| `schemas/sessions.yaml` | YAML schema |
-| `schemas/webhooks.json` | Schema of the external JSON table |
+| `schemas/*.json` | One schema file per table, in the format of `bq show --schema`; `page_views.json` has a RECORD and a REPEATED field |

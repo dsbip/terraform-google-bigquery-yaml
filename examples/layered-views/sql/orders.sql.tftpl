@@ -1,0 +1,6 @@
+SELECT * EXCEPT (rn)
+FROM (
+  SELECT *, ROW_NUMBER() OVER (PARTITION BY order_id ORDER BY loaded_at DESC) AS rn
+  FROM `${project_id}.staging.orders_raw`
+)
+WHERE rn = 1

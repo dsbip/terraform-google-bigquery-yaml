@@ -34,7 +34,7 @@ Prerequisites: the BigQuery Data Transfer API (`bigquerydatatransfer.googleapis.
 | `email_preferences` | mapping | | `enable_failure_email: true` emails the owner on failures. |
 | `service_account_name` | string | | Run as this service account instead of the creator. |
 | `query` | string | | Shortcut for `params.query`. |
-| `query_file` | path | | Shortcut for `params.query`, read from a file; `*.tftpl` files are rendered. |
+| `query_file` | path | | Shortcut for `params.query`, read from a file; `*.tftpl` files are rendered. The plan fails for an empty file, and for a `.sql` file that uses `${project_id}`, `${datasets...}` or a `template_vars` name (rename it to `.sql.tftpl`), as for [views](views.md#sql-files). |
 | `params` | map | | Source-specific parameters. Numbers and booleans are converted to strings. |
 | `encryption_configuration` | `{kms_key_name}` | | |
 | `sensitive_params` | `{secret_access_key_secret}` | | Name of the `secrets` entry holding the AWS secret access key. |

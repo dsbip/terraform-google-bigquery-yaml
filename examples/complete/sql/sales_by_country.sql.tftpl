@@ -1,0 +1,4 @@
+SELECT country_code, SUM(revenue) AS revenue
+FROM `${project_id}.core.mv_daily_sales`
+WHERE order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
+GROUP BY country_code

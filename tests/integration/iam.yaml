@@ -15,19 +15,23 @@ datasets:
   raw:
     create: false
     dataset_id: bqyaml_${suffix}_raw
-    tables:
-      audit:
-        schema:
-          - { name: at, type: TIMESTAMP }
-        iam:
-          - role: roles/bigquery.dataViewer
-            members:
-              - ${test_member}
-    routines:
-      audit_count:
-        definition_body: "1"
-        return_type: INT64
-        iam:
-          - role: roles/bigquery.dataViewer
-            members:
-              - ${test_member}
+
+tables:
+  audit:
+    dataset: raw
+    schema:
+      - { name: at, type: TIMESTAMP }
+    iam:
+      - role: roles/bigquery.dataViewer
+        members:
+          - ${test_member}
+
+routines:
+  audit_count:
+    dataset: raw
+    definition_body: "1"
+    return_type: INT64
+    iam:
+      - role: roles/bigquery.dataViewer
+        members:
+          - ${test_member}

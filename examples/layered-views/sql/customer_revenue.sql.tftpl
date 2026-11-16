@@ -1,0 +1,4 @@
+SELECT customer_id, SUM(amount) AS revenue
+FROM `${project_id}.staging.orders`
+WHERE status = 'COMPLETED'
+GROUP BY customer_id

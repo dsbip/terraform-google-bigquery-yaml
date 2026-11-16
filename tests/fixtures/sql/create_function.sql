@@ -1,0 +1,1 @@
+CREATE OR REPLACE FUNCTION d.add_one(x INT64) AS (x + 1)

@@ -1,0 +1,3 @@
+SELECT DATE(ordered_at) AS day, COUNT(*) AS orders
+FROM `${project_id}.${datasets.sales}.orders`
+GROUP BY day

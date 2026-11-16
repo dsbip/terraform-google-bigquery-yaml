@@ -14,11 +14,13 @@ run "view_defaults" {
     config_yaml = <<-EOT
       datasets:
         reporting:
-          views:
-            v:
-              description: A view
-              friendly_name: V
-              query: SELECT 1 AS one
+
+      views:
+        v:
+          dataset: reporting
+          description: A view
+          friendly_name: V
+          query: SELECT 1 AS one
     EOT
   }
 
@@ -44,15 +46,18 @@ run "view_defaults_can_be_overridden" {
           deletion_protection: true
       datasets:
         reporting:
-          views:
-            protected:
-              query: SELECT 1
-            legacy:
-              query: SELECT 1
-              use_legacy_sql: true
-              deletion_protection: false
-              deletion_policy: ABANDON
-              expiration_time: 1893456000000
+
+      views:
+        protected:
+          dataset: reporting
+          query: SELECT 1
+        legacy:
+          dataset: reporting
+          query: SELECT 1
+          use_legacy_sql: true
+          deletion_protection: false
+          deletion_policy: ABANDON
+          expiration_time: 1893456000000
     EOT
   }
 
@@ -80,11 +85,14 @@ run "view_query_from_files" {
       datasets:
         events:
           dataset_id: events_qa
-          views:
-            templated:
-              query_file: sql/latest.sql.tftpl
-            plain:
-              query_file: sql/static.sql
+
+      views:
+        templated:
+          dataset: events
+          query_file: sql/latest.sql.tftpl
+        plain:
+          dataset: events
+          query_file: sql/static.sql
     EOT
   }
 
@@ -109,21 +117,24 @@ run "materialized_views" {
           refresh_interval_ms: 1800000
       datasets:
         core:
-          materialized_views:
-            daily:
-              description: Daily totals
-              query: SELECT d, SUM(x) AS s FROM `p.core.t` GROUP BY d
-              time_partitioning: { field: d }
-              clustering: [d]
-              max_staleness: "0-0 0 0:30:0"
-              allow_non_incremental_definition: true
-            by_range:
-              query: SELECT id FROM `p.core.t`
-              range_partitioning:
-                field: id
-                range: { start: 0, end: 10, interval: 1 }
-              enable_refresh: false
-              deletion_protection: false
+
+      materialized_views:
+        daily:
+          dataset: core
+          description: Daily totals
+          query: SELECT d, SUM(x) AS s FROM `p.core.t` GROUP BY d
+          time_partitioning: { field: d }
+          clustering: [d]
+          max_staleness: "0-0 0 0:30:0"
+          allow_non_incremental_definition: true
+        by_range:
+          dataset: core
+          query: SELECT id FROM `p.core.t`
+          range_partitioning:
+            field: id
+            range: { start: 0, end: 10, interval: 1 }
+          enable_refresh: false
+          deletion_protection: false
     EOT
   }
 
@@ -165,18 +176,22 @@ run "view_and_materialized_view_iam" {
     config_yaml = <<-EOT
       datasets:
         reporting:
-          views:
-            v:
-              query: SELECT 1
-              iam:
-                - role: roles/bigquery.dataViewer
-                  members: [group:bi@example.com]
-          materialized_views:
-            mv:
-              query: SELECT 1
-              iam:
-                - role: roles/bigquery.dataViewer
-                  members: [group:bi@example.com]
+
+      views:
+        v:
+          dataset: reporting
+          query: SELECT 1
+          iam:
+            - role: roles/bigquery.dataViewer
+              members: [group:bi@example.com]
+
+      materialized_views:
+        mv:
+          dataset: reporting
+          query: SELECT 1
+          iam:
+            - role: roles/bigquery.dataViewer
+              members: [group:bi@example.com]
     EOT
   }
 

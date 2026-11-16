@@ -25,13 +25,17 @@ run "authorized_view_references_resolve" {
         shared:
           dataset_id: shared_prod
           project_id: shared-project
-          views:
-            v_managed:
-              table_id: v_managed_v2
-              query: SELECT 1
-          materialized_views:
-            mv_managed:
-              query: SELECT 1
+
+      views:
+        v_managed:
+          dataset: shared
+          table_id: v_managed_v2
+          query: SELECT 1
+
+      materialized_views:
+        mv_managed:
+          dataset: shared
+          query: SELECT 1
     EOT
   }
 
@@ -79,11 +83,13 @@ run "authorized_datasets_and_routines" {
             - other-project.udfs.fn
         shared:
           dataset_id: shared_prod
-          routines:
-            tvf:
-              routine_id: tvf_v2
-              routine_type: TABLE_VALUED_FUNCTION
-              definition_body: SELECT 1 AS x
+
+      routines:
+        tvf:
+          dataset: shared
+          routine_id: tvf_v2
+          routine_type: TABLE_VALUED_FUNCTION
+          definition_body: SELECT 1 AS x
     EOT
   }
 
@@ -133,9 +139,11 @@ run "authorizations_on_existing_dataset_and_duplicates" {
             - reporting.v          # listed twice
             -                      # empty item, ignored
         reporting:
-          views:
-            v:
-              query: SELECT 1
+
+      views:
+        v:
+          dataset: reporting
+          query: SELECT 1
     EOT
   }
 

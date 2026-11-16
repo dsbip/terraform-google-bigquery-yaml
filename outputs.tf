@@ -17,7 +17,7 @@ output "datasets" {
 }
 
 output "tables" {
-  description = "Tables, keyed by \"<dataset key>.<table key>\"."
+  description = "Tables, keyed by \"<dataset key>.<table key>\", where <dataset key> is the table's dataset: value (e.g. \"sales.orders\")."
   value = {
     for k, t in google_bigquery_table.table : k => {
       id         = t.id
@@ -30,7 +30,7 @@ output "tables" {
 }
 
 output "views" {
-  description = "Logical views, keyed by \"<dataset key>.<view key>\"."
+  description = "Logical views, keyed by \"<dataset key>.<view key>\" (the view's dataset: value and its key)."
   value = {
     for k, t in google_bigquery_table.view : k => {
       id         = t.id
@@ -43,7 +43,7 @@ output "views" {
 }
 
 output "materialized_views" {
-  description = "Materialized views, keyed by \"<dataset key>.<view key>\"."
+  description = "Materialized views, keyed by \"<dataset key>.<view key>\" (the view's dataset: value and its key)."
   value = {
     for k, t in google_bigquery_table.materialized_view : k => {
       id         = t.id
@@ -56,7 +56,7 @@ output "materialized_views" {
 }
 
 output "routines" {
-  description = "Routines, keyed by \"<dataset key>.<routine key>\"."
+  description = "Routines, keyed by \"<dataset key>.<routine key>\" (the routine's dataset: value and its key)."
   value = {
     for k, r in google_bigquery_routine.this : k => {
       id           = r.id

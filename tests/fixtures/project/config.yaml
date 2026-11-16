@@ -1,0 +1,56 @@
+# Tables take their schema from JSON files, views their SQL from SQL files and
+# routines their body from files in routines/, all relative to this file.
+# Used by tests/files.tftest.hcl.
+datasets:
+  sales:
+    dataset_id: sales_${env}
+  reporting: {}
+
+tables:
+  orders:
+    dataset: sales
+    schema_file: schemas/orders.json # a list of fields, as from bq show --schema
+  customers:
+    dataset: sales
+    schema_file: schemas/customers.json # {"fields": [...]}, as in the BigQuery API
+  events:
+    dataset: sales
+    schema_file: schemas/events.json.tftpl # rendered with template_vars
+  products:
+    dataset: sales
+    schema_file: schemas/products.yaml # YAML works too
+
+views:
+  revenue:
+    dataset: reporting
+    query_file: sql/revenue.sql.tftpl # rendered: project and dataset IDs
+  constant:
+    dataset: reporting
+    query_file: sql/constant.sql # used as written
+
+materialized_views:
+  daily_orders:
+    dataset: sales
+    query_file: sql/daily_orders.sql.tftpl
+
+routines:
+  normalize_email:
+    dataset: sales
+    arguments: [{ name: email, data_type: STRING }]
+    return_type: STRING
+    definition_file: routines/normalize_email.sql # used as written
+  orders_above:
+    dataset: sales
+    routine_type: TABLE_VALUED_FUNCTION
+    arguments: [{ name: min_amount, data_type: NUMERIC }]
+    definition_file: routines/orders_above.sql.tftpl # rendered
+  title_case:
+    dataset: sales
+    language: JAVASCRIPT
+    arguments: [{ name: words, data_type: { typeKind: ARRAY, arrayElementType: { typeKind: STRING } } }]
+    return_type: STRING
+    definition_file: routines/title_case.js # template literals stay as written
+  clean_orders:
+    dataset: sales
+    routine_type: PROCEDURE
+    definition_file: routines/clean_orders.sql.tftpl

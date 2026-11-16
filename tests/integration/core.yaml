@@ -31,93 +31,112 @@ datasets:
       - analytics
     authorized_routines:
       - shared.tvf_big_orders
-    tables:
-      customers:
-        description: Customers (revision ${revision})
-        schema:
-          - { name: customer_id, type: STRING, mode: REQUIRED }
-          - { name: email, type: STRING }
-          - { name: country, type: STRING }
-        table_constraints:
-          primary_key:
-            columns: [customer_id]
-      orders:
-        schema_file: schemas/orders.json
-        time_partitioning:
-          field: ordered_at
-        clustering: [customer_id]
-        table_constraints:
-          primary_key:
-            columns: [order_id]
-          # References a table created in the same apply.
-          foreign_keys:
-            - name: fk_orders_customers
-              referenced_table: raw.customers
-              column_references:
-                referencing_column: customer_id
-                referenced_column: customer_id
-      scores:
-        schema:
-          - { name: customer_id, type: INT64 }
-          - { name: score, type: FLOAT64 }
-        range_partitioning:
-          field: customer_id
-          range: { start: 0, end: 1000, interval: 100 }
 
   shared:
     dataset_id: bqyaml_${suffix}_shared
-    views:
-      v_orders:
-        description: Orders without customer data (revision ${revision})
-        query: |
-          SELECT order_id, amount, ordered_at
-          FROM `${project_id}.bqyaml_${suffix}_raw.orders`
-    materialized_views:
-      mv_order_totals:
-        query: |
-          SELECT customer_id, SUM(amount) AS total
-          FROM `${project_id}.bqyaml_${suffix}_raw.orders`
-          GROUP BY customer_id
-        enable_refresh: true
-        refresh_interval_ms: 3600000
-    routines:
-      normalize_email:
-        arguments:
-          - { name: email, data_type: STRING }
-        return_type: STRING
-        definition_body: LOWER(TRIM(email))
-      js_initials:
-        language: JAVASCRIPT
-        arguments:
-          - { name: name, data_type: STRING }
-        return_type: STRING
-        definition_body: "return name.split(' ').map(function (w) { return w[0]; }).join('');"
-      tvf_big_orders:
-        routine_type: TABLE_VALUED_FUNCTION
-        arguments:
-          - { name: min_amount, data_type: NUMERIC }
-        definition_body: |
-          SELECT order_id, amount
-          FROM `${project_id}.bqyaml_${suffix}_raw.orders`
-          WHERE amount >= min_amount
-        return_table_type:
-          columns:
-            - { name: order_id, type: STRING }
-            - { name: amount, type: NUMERIC }
-      count_orders:
-        routine_type: PROCEDURE
-        arguments:
-          - { name: total, data_type: INT64, mode: OUT }
-        definition_body: |
-          BEGIN
-            SET total = (SELECT COUNT(*) FROM `${project_id}.bqyaml_${suffix}_raw.orders`);
-          END
 
   analytics:
     dataset_id: bqyaml_${suffix}_analytics
-    views:
-      v_customers_per_country:
-        query: |
-          SELECT country, COUNT(*) AS customers
-          FROM `${project_id}.bqyaml_${suffix}_raw.customers`
-          GROUP BY country
+
+tables:
+  customers:
+    dataset: raw
+    description: Customers (revision ${revision})
+    schema:
+      - { name: customer_id, type: STRING, mode: REQUIRED }
+      - { name: email, type: STRING }
+      - { name: country, type: STRING }
+    table_constraints:
+      primary_key:
+        columns: [customer_id]
+
+  orders:
+    dataset: raw
+    schema_file: schemas/orders.json
+    time_partitioning:
+      field: ordered_at
+    clustering: [customer_id]
+    table_constraints:
+      primary_key:
+        columns: [order_id]
+      # References a table created in the same apply.
+      foreign_keys:
+        - name: fk_orders_customers
+          referenced_table: raw.customers
+          column_references:
+            referencing_column: customer_id
+            referenced_column: customer_id
+
+  scores:
+    dataset: raw
+    schema:
+      - { name: customer_id, type: INT64 }
+      - { name: score, type: FLOAT64 }
+    range_partitioning:
+      field: customer_id
+      range: { start: 0, end: 1000, interval: 100 }
+
+views:
+  v_orders:
+    dataset: shared
+    description: Orders without customer data (revision ${revision})
+    query: |
+      SELECT order_id, amount, ordered_at
+      FROM `${project_id}.bqyaml_${suffix}_raw.orders`
+
+  v_customers_per_country:
+    dataset: analytics
+    query: |
+      SELECT country, COUNT(*) AS customers
+      FROM `${project_id}.bqyaml_${suffix}_raw.customers`
+      GROUP BY country
+
+materialized_views:
+  mv_order_totals:
+    dataset: shared
+    query: |
+      SELECT customer_id, SUM(amount) AS total
+      FROM `${project_id}.bqyaml_${suffix}_raw.orders`
+      GROUP BY customer_id
+    enable_refresh: true
+    refresh_interval_ms: 3600000
+
+routines:
+  normalize_email:
+    dataset: shared
+    arguments:
+      - { name: email, data_type: STRING }
+    return_type: STRING
+    definition_body: LOWER(TRIM(email))
+
+  js_initials:
+    dataset: shared
+    language: JAVASCRIPT
+    arguments:
+      - { name: name, data_type: STRING }
+    return_type: STRING
+    definition_body: "return name.split(' ').map(function (w) { return w[0]; }).join('');"
+
+  tvf_big_orders:
+    dataset: shared
+    routine_type: TABLE_VALUED_FUNCTION
+    arguments:
+      - { name: min_amount, data_type: NUMERIC }
+    definition_body: |
+      SELECT order_id, amount
+      FROM `${project_id}.bqyaml_${suffix}_raw.orders`
+      WHERE amount >= min_amount
+    return_table_type:
+      columns:
+        - { name: order_id, type: STRING }
+        - { name: amount, type: NUMERIC }
+
+  count_orders:
+    dataset: shared
+    routine_type: PROCEDURE
+    arguments:
+      - { name: total, data_type: INT64, mode: OUT }
+    definition_body: |
+      BEGIN
+        SET total = (SELECT COUNT(*) FROM `${project_id}.bqyaml_${suffix}_raw.orders`);
+      END

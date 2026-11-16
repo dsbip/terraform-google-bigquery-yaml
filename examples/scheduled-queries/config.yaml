@@ -20,37 +20,29 @@ defaults:
 datasets:
   shop:
     description: Operational data replicated from the shop database.
-    tables:
-      orders:
-        schema:
-          - { name: order_id, type: STRING, mode: REQUIRED }
-          - { name: customer_id, type: STRING }
-          - { name: amount, type: NUMERIC }
-          - { name: status, type: STRING }
-          - { name: updated_at, type: TIMESTAMP }
-        time_partitioning: { field: updated_at }
-
-      # Destination of the Cloud Storage and S3 loads below. Transfers load
-      # into existing tables, so the tables are declared here.
-      partner_orders:
-        schema:
-          - { name: order_id, type: STRING }
-          - { name: partner, type: STRING }
-          - { name: amount, type: NUMERIC }
-          - { name: exported_at, type: TIMESTAMP }
-      marketplace_orders:
-        schema:
-          - { name: order_id, type: STRING }
-          - { name: amount, type: NUMERIC }
 
   reporting:
     description: Tables written by scheduled queries.
-    tables:
-      customer_ltv:
-        schema:
-          - { name: customer_id, type: STRING, mode: REQUIRED }
-          - { name: lifetime_value, type: NUMERIC }
-          - { name: last_order_at, type: TIMESTAMP }
+
+tables:
+  orders:
+    dataset: shop
+    schema_file: schemas/orders.json
+    time_partitioning: { field: updated_at }
+
+  # Destination of the Cloud Storage and S3 loads below. Transfers load
+  # into existing tables, so the tables are declared here.
+  partner_orders:
+    dataset: shop
+    schema_file: schemas/partner_orders.json
+
+  marketplace_orders:
+    dataset: shop
+    schema_file: schemas/marketplace_orders.json
+
+  customer_ltv:
+    dataset: reporting
+    schema_file: schemas/customer_ltv.json
 
 transfers:
   # A daily snapshot table per run date: daily_revenue_20260101, ...
