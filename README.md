@@ -213,7 +213,7 @@ Each example is a runnable root module with a commented `config.yaml`; see [exam
 The module has four test layers, run by CI on every push:
 
 1. `terraform fmt` and `terraform validate`
-2. **103 unit tests** (`terraform test`, mocked provider): every feature, precedence rule and validation message, on Terraform 1.7 and latest with provider 7.42 and latest
+2. **105 unit tests** (`terraform test`, mocked provider): every feature, precedence rule and validation message, on Terraform 1.7 and latest with provider 7.42 and latest
 3. **Real-provider plans** of all ten examples and the live-test fixture, without Google Cloud access, on Terraform 1.5.7 with provider 7.42.0 and on the latest versions; plus JSON Schema checks
 4. **A live test** that deploys into a real project, checks that a second plan is empty, updates in place and destroys everything (run on demand)
 

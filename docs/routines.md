@@ -54,7 +54,7 @@ The plan fails when:
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `dataset` | string | required | Key of the routine's dataset under `datasets`. |
-| `routine_id` | string | map key | Routine ID. |
+| `routine_id` | string | map key | Routine ID. Two routines may share a `routine_id` in different datasets; in the same dataset, validation reports them. |
 | `routine_type` | `SCALAR_FUNCTION`, `TABLE_VALUED_FUNCTION`, `PROCEDURE` | `SCALAR_FUNCTION` | |
 | `language` | `SQL`, `JAVASCRIPT`, `PYTHON`, `JAVA`, `SCALA` | BigQuery: `SQL` | Case-insensitive. |
 | `definition_body` | string | | The body: for SQL functions the expression inside `AS (...)`, for procedures the `BEGIN ... END` block, for JavaScript the function body. |

@@ -19,10 +19,11 @@ All notable changes to this module are documented here. The format follows [Keep
 - Routine bodies in files, checked: an empty body, a `definition_file` whose extension does not match `language` (a `.js` body in a routine that defaults to SQL), a SQL body file that uses the module's template variables without being a `.tftpl` file, and a JavaScript function without `return_type` all fail the plan. Scheduled-query SQL files get the same empty and `.tftpl` checks as view SQL.
 - Every example keeps its table schemas in `schemas/*.json` (`schema_file`), its view and materialized view SQL in `sql/*.sql.tftpl` (`query_file`) and its routine bodies in `routines/` (`definition_file`).
 - More schema checks: `policyTags` may hold only `names` (a misspelt key would silently drop column-level security), and `RANGE` fields need a `rangeElementType` of `DATE`, `DATETIME` or `TIMESTAMP`.
+- Two routine keys that resolve to the same routine (the same `routine_id` in the same dataset) fail the plan, as tables already did.
 - View and routine SQL that is a `CREATE ...` statement fails the plan with a hint to keep only the query or body: the module creates these objects from the YAML, and BigQuery would reject the DDL during apply. Scheduled queries may still run DDL.
 - Labels and locations are checked during plan instead of failing during apply: label keys and values must be lowercase letters, digits, underscores or dashes (`team: GSS` suggests `gss`), and a location must be a region, `US`, `EU` or a BigQuery Omni location (`europe-wetst` is reported).
 - A copy of the module whose `schemas/bigquery-config.schema.json` is from another version than its `.tf` files is reported as such, instead of as unknown keys such as `tables` and `dataset`. The schema file carries an `x-schema-revision` for this.
-- Unit tests grew from 81 to 103, with tests for the new layout, references by key, schema, SQL and routine files, and the new checks. Every example and the live-test fixture were planned in their v1 and v2 forms with the real provider, and all 174 resources were identical.
+- Unit tests grew from 81 to 105, with tests for the new layout, references by key, schema, SQL and routine files, and the new checks. Every example and the live-test fixture were planned in their v1 and v2 forms with the real provider, and all 174 resources were identical.
 
 ## [1.0.0] - 2026-09-30
 

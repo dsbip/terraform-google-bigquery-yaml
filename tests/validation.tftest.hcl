@@ -1008,3 +1008,30 @@ run "create_statements_in_view_and_routine_sql" {
     error_message = "Unexpected messages: ${jsonencode(local.validation_errors)}"
   }
 }
+
+run "routine_dataset_rules" {
+  command = plan
+
+  variables {
+    config_yaml = <<-EOT
+      datasets:
+        udfs: {}
+        analytics: {}
+      routines:
+        typo: { dataset: udsf, definition_body: "1" }
+        same_a: { dataset: udfs, routine_id: clean, definition_body: "1" }
+        same_b: { dataset: udfs, routine_id: clean, definition_body: "2" }
+        other_dataset: { dataset: analytics, routine_id: clean, definition_body: "3" }
+    EOT
+  }
+
+  expect_failures = [terraform_data.validation]
+
+  assert {
+    condition = toset(local.validation_errors) == toset([
+      "routines.typo.dataset: \"udsf\" is not a key under datasets (did you mean udfs?); declare a dataset managed elsewhere with create: false",
+      "routines.same_a and routines.same_b: resolve to the same routine test-project.udfs.clean",
+    ])
+    error_message = "Unexpected messages: ${jsonencode(local.validation_errors)}"
+  }
+}

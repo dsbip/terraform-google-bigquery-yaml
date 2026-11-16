@@ -323,3 +323,68 @@ run "routine_iam" {
     error_message = "Routine IAM member is wrong."
   }
 }
+
+run "routines_take_their_dataset" {
+  command = plan
+
+  variables {
+    config_yaml = <<-EOT
+      datasets:
+        shared:                      # managed elsewhere, in another project
+          create: false
+          project_id: platform-project
+          dataset_id: shared_udfs
+        udfs:
+          dataset_id: udfs_dev
+      routines:
+        clean_email:
+          dataset: shared
+          routine_id: clean_email_v2
+          arguments: [{ name: email, data_type: STRING }]
+          return_type: STRING
+          definition_body: LOWER(TRIM(email))
+          iam:
+            - role: roles/bigquery.dataViewer
+              members: [group:analysts@example.com]
+        clean_email_local:
+          dataset: udfs
+          routine_id: clean_email_v2 # the same routine_id in another dataset
+          arguments: [{ name: email, data_type: STRING }]
+          return_type: STRING
+          definition_body: LOWER(email)
+    EOT
+  }
+
+  assert {
+    condition = (
+      google_bigquery_routine.this["shared.clean_email"].project == "platform-project" &&
+      google_bigquery_routine.this["shared.clean_email"].dataset_id == "shared_udfs" &&
+      google_bigquery_routine.this["shared.clean_email"].routine_id == "clean_email_v2"
+    )
+    error_message = "A routine should be created in its dataset's project and real dataset ID, with its routine_id."
+  }
+  assert {
+    condition = (
+      google_bigquery_routine.this["udfs.clean_email_local"].project == "test-project" &&
+      google_bigquery_routine.this["udfs.clean_email_local"].dataset_id == "udfs_dev" &&
+      google_bigquery_routine.this["udfs.clean_email_local"].routine_id == "clean_email_v2"
+    )
+    error_message = "The same routine_id in another dataset should be its own routine."
+  }
+  assert {
+    condition     = toset(keys(google_bigquery_dataset.this)) == toset(["udfs"])
+    error_message = "A create: false dataset must not be created."
+  }
+  assert {
+    condition = (
+      google_bigquery_routine_iam_member.this["shared.clean_email|roles/bigquery.dataViewer|group:analysts@example.com"].project == "platform-project" &&
+      google_bigquery_routine_iam_member.this["shared.clean_email|roles/bigquery.dataViewer|group:analysts@example.com"].dataset_id == "shared_udfs" &&
+      google_bigquery_routine_iam_member.this["shared.clean_email|roles/bigquery.dataViewer|group:analysts@example.com"].routine_id == "clean_email_v2"
+    )
+    error_message = "Routine IAM should target the routine's real IDs."
+  }
+  assert {
+    condition     = toset(keys(output.routines)) == toset(["shared.clean_email", "udfs.clean_email_local"])
+    error_message = "Routines should be output by \"<dataset key>.<key>\"."
+  }
+}

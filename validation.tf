@@ -763,6 +763,18 @@ locals {
     )
   ])
 
+  # Different keys can resolve to one routine through routine_id overrides; the
+  # second would fail to be created. The same routine_id in different datasets
+  # is fine. Entries without a valid dataset are reported by dataset_ref_errors.
+  duplicate_routine_errors = [
+    for id, paths in {
+      for k, r in local.routines : "${coalesce(r.project, "<no project>")}.${r.dataset_id}.${r.routine_id}" => r.path...
+      if r.dataset_id != ""
+    } :
+    "${join(" and ", paths)}: resolve to the same routine ${id}"
+    if length(paths) > 1
+  ]
+
   # Routine bodies. A file's extension must match the routine's language (a .js
   # body in a routine that defaults to SQL fails only in BigQuery), and a SQL
   # file that uses the module's template variables must be a .tftpl file, as
@@ -1022,6 +1034,7 @@ locals {
     local.duplicate_table_errors,
     local.file_errors,
     local.routine_errors,
+    local.duplicate_routine_errors,
     local.routine_body_errors,
     local.boolean_name_errors,
     local.connection_errors,

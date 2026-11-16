@@ -68,6 +68,7 @@ While the configuration is invalid, the module gives every resource an empty `fo
 
 - No two dataset keys resolve to the same dataset.
 - No two table, view or materialized view entries resolve to the same table.
+- No two routine entries resolve to the same routine (for example through `routine_id`).
 - Keys are unique across tables, views and materialized views of a dataset.
 - No two connection keys resolve to the same connection.
 
